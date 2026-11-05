@@ -13,8 +13,9 @@ import { summarize834, compare834 } from './summary.mjs';
 import { explainCode } from './explain.mjs';
 import { CODE_TABLES } from './codes.mjs';
 import { readEdiFile, readJson, baseDir } from './files.mjs';
+import { setupGuide, chooseService, workdayHint, SECTION_ORDER, WORKDAY_TEMPLATE } from './workday.mjs';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const server = new McpServer({ name: 'edi-834-mcp', version: VERSION });
 
 const profileSchema = z.object({
@@ -59,6 +60,8 @@ server.tool(
     'Each finding has a rule ID, severity, segment position, plain-English message and fix.',
     'Names, SSNs and birth dates are never included unless show_pii=true.',
     'Pass a carrier profile (inline or profile_path) to apply companion-guide rules.',
+    'Set platform="workday_ccb_834_v2" for files from Workday Cloud Connect for Benefits 834 V2:',
+    'each finding then says where in Workday to fix it (map, attribute, service, security or data).',
   ].join('\n'),
   {
     ...source,
@@ -66,6 +69,7 @@ server.tool(
     profile_path: z.string().optional().describe('JSON profile file relative to EDI_834_DIR, e.g. "profiles/acme-health.json".'),
     show_pii: z.boolean().optional().describe('Include member names in messages. Default false.'),
     max_findings: z.number().int().positive().optional().describe('Limit findings returned (errors first). Default 200.'),
+    platform: z.enum(['generic', 'workday_ccb_834_v2']).optional().describe('Source system. "workday_ccb_834_v2" adds where_to_fix (Workday task or setting) to every finding.'),
   },
   async (args) => {
     try {
@@ -73,7 +77,11 @@ server.tool(
       const profile = args.profile_path ? await readJson(args.profile_path) : (args.profile || {});
       const r = validate834(raw, { profile, showPii: !!args.show_pii });
       const limit = args.max_findings || 200;
-      return ok({ ...r, findings: r.findings.slice(0, limit), findings_truncated: r.findings.length > limit });
+      let findings = r.findings.slice(0, limit);
+      if (args.platform === 'workday_ccb_834_v2') {
+        findings = findings.map(f => ({ ...f, where_to_fix: workdayHint(f.rule) }));
+      }
+      return ok({ ...r, platform: args.platform || 'generic', findings, findings_truncated: r.findings.length > limit });
     } catch (e) { return fail(e); }
   },
 );
@@ -116,6 +124,32 @@ server.tool(
     code: z.string().optional().describe('The code to look up. Omit to list the table.'),
   },
   async ({ table, code }) => ok(explainCode(table, code)),
+);
+
+server.tool(
+  'workday_834_setup_guide',
+  [
+    `Step-by-step setup of Workday's "${WORKDAY_TEMPLATE}" connector:`,
+    'ISU and security group, creating the integration system, choosing the transmission service,',
+    'integration attributes, maps, field attributes, population eligibility and overrides, delivery,',
+    'and the test loop with validate_834 and compare_834. Each section lists common pitfalls.',
+  ].join('\n'),
+  {
+    section: z.enum(['all', ...SECTION_ORDER]).optional().describe('One section, or "all" (default).'),
+  },
+  async ({ section }) => ok(setupGuide(section || 'all')),
+);
+
+server.tool(
+  'choose_workday_834_service',
+  'Pick the right CCB ANSI X12 834 V2 transmission service from what the carrier requires (change file or full file, and how terminations must be reported). Exactly one service may be enabled.',
+  {
+    file_type: z.enum(['changes', 'full']).describe('Does the carrier want only changes, or a full file every time?'),
+    terminations: z.enum(['yes', 'no', 'once']).optional().describe('For full files: send ended coverages (yes, within a look-back window), never (no — carrier terminates by omission), or once per termination (once). Default yes.'),
+    terminate_by: z.enum(['plan', 'plan_type']).optional().describe('Report a termination per plan (default) or only when all plans of a plan type have ended.'),
+    history_days: z.number().int().positive().optional().describe('Look-back days for ended coverages (Full File service).'),
+  },
+  async (args) => ok(chooseService(args)),
 );
 
 server.tool(

@@ -11,7 +11,7 @@ This MCP server lets Claude check 834 files the way an experienced benefits inte
 - **Summarize** what a file will do: adds, changes, terminations, coverage lines and tiers.
 - **Explain** any 834 code (relationship, maintenance type, coverage level...).
 
-It works with 834 files from any system: Workday, ADP, UKG, Oracle, SAP SuccessFactors or in-house payroll.
+It works with 834 files from any system: Workday, ADP, UKG, Oracle, SAP SuccessFactors or in-house payroll. For **Workday**, it also guides the connector setup and tells you where in Workday to fix each problem.
 
 ## Privacy by design
 
@@ -32,6 +32,8 @@ See [SECURITY.md](SECURITY.md).
 | `compare_834` | Differences between two files, with full-file awareness: anyone missing from a replacement file is flagged as a potential termination. |
 | `summarize_834` | Counts by action, coverage line and tier, plus sender, payer, file type and date. No PII. |
 | `explain_834_code` | Meaning of any code, or a whole code table. |
+| `workday_834_setup_guide` | Step-by-step setup of Workday's Cloud Connect for Benefits: ANSI X12 834 V2 connector, with pitfalls. |
+| `choose_workday_834_service` | Picks the right 834 V2 transmission service from the carrier's requirements. |
 | `get_default_profile` | The baseline settings a carrier profile can override. |
 
 The full rule list is in [docs/rules.md](docs/rules.md).
@@ -93,6 +95,34 @@ Example finding:
 }
 ```
 
+## Workday: Cloud Connect for Benefits 834 V2
+
+If your files come from Workday's **Cloud Connect for Benefits: ANSI X12 834 V2** template:
+
+1. **Set up the connector.**
+   > "Walk me through setting up the Workday 834 V2 connector for Acme Health"
+
+   `workday_834_setup_guide` covers the ISU and security group, the integration system, the transmission service, attributes, maps (INS02, DMG03, HD03, HD05), field attributes, population eligibility, overrides and delivery.
+2. **Pick the transmission service.**
+   > "Acme wants a full file every week and terminations reported once. Which service?"
+3. **Test with the Debug Service.** Launch for a few test workers, download the output from the integration event into `EDI_834_DIR`, then:
+   > "Validate acme_test.edi as a Workday 834 V2 file with profile profiles/acme.json"
+
+   With `platform: "workday_ccb_834_v2"`, each finding says where to fix it:
+   ```json
+   {
+     "rule": "HD05",
+     "message": "Member #3 (subscriber …4821, Self), Health: HD05 coverage level \"EE+DP\" is not valid.",
+     "where_to_fix": {
+       "where": "Configure Integration Maps > Loop2300_HD05 (after Maintain Health Care Coverage Targets)",
+       "how": "Map every coverage target to the carrier's code. If a target is missing from the map list, run Maintain Health Care Coverage Targets first."
+     }
+   }
+   ```
+4. **Compare runs** with `compare_834` before every send, especially with full-file services.
+
+The full guide and fix table: [docs/workday-ccb-834-v2.md](docs/workday-ccb-834-v2.md).
+
 ## Carrier profiles
 
 Carriers publish companion guides that tighten the standard. Put their rules in a JSON file inside `EDI_834_DIR` and pass `profile_path`:
@@ -133,4 +163,4 @@ Run `npm test` before opening a PR. Every rule needs a test that fires on bad in
 
 MIT. Copyright (c) 2026 Humza Arshad. See [LICENSE](LICENSE).
 
-X12 and ASC X12 are trademarks of the Accredited Standards Committee X12. This project is not affiliated with or endorsed by X12.
+X12 and ASC X12 are trademarks of the Accredited Standards Committee X12. Workday is a trademark of Workday, Inc. This project is not affiliated with or endorsed by X12 or Workday.
