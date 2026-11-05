@@ -1,0 +1,9 @@
+node_modules/
+.env
+.DS_Store
+# Never commit real enrollment files
+*.edi
+*.834
+*.x12
+*.txt
+!docs/*.txt

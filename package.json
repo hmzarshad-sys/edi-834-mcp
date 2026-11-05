@@ -1,0 +1,20 @@
+{
+  "name": "edi-834-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that validates, compares and explains HIPAA X12 834 benefit enrollment files locally, with PII masked by default",
+  "type": "module",
+  "main": "src/index.mjs",
+  "bin": { "edi-834-mcp": "src/index.mjs" },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "keywords": ["mcp", "edi", "x12", "834", "benefits", "enrollment", "hipaa", "hr", "payroll", "workday"],
+  "author": "Humza Arshad",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.2",
+    "zod": "^3.22.0"
+  }
+}

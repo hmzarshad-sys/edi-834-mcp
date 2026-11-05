@@ -1,0 +1,10 @@
+{
+  "name": "Example carrier companion guide",
+  "allowed_insurance_lines": ["HLT", "DEN", "VIS"],
+  "allowed_coverage_levels": ["EMP", "ESP", "ECH", "FAM"],
+  "require_group_number": true,
+  "require_ssn": true,
+  "max_retro_days": 60,
+  "max_future_days": 120,
+  "dependent_age_limit": 26
+}
