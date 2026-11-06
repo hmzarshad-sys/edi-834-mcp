@@ -6,7 +6,7 @@ U.S. employers send employee health, dental, vision and other benefit enrollment
 
 This MCP server lets Claude check 834 files the way an experienced benefits integration analyst would, locally, on your machine:
 
-- **Validate** a file against the 005010X220A1 standard and your carrier's companion-guide rules: 64 rules, each with a plain-English message and a fix.
+- **Validate** a file against the 005010X220A1 standard and your carrier's companion-guide rules: 72 rules, each with a plain-English message and a fix.
 - **Compare** this week's file with last week's to catch dropped dependents, unintended terminations and tier changes before the carrier processes them.
 - **Summarize** what a file will do: adds, changes, terminations, coverage lines and tiers.
 - **Explain** any 834 code (relationship, maintenance type, coverage level...).
@@ -28,7 +28,7 @@ See [SECURITY.md](SECURITY.md).
 
 | Tool | What it does |
 |---|---|
-| `validate_834` | Envelope, header, member and coverage checks with rule IDs, severities, segment positions and fixes. Accepts a carrier profile. |
+| `validate_834` | Envelope, segment, element-length, header, member, address and coverage checks with rule IDs, severities, segment positions and fixes. Accepts a carrier profile. |
 | `compare_834` | Differences between two files, with full-file awareness: anyone missing from a replacement file is flagged as a potential termination. |
 | `summarize_834` | Counts by action, coverage line and tier, plus sender, payer, file type and date. No PII. |
 | `explain_834_code` | Meaning of any code, or a whole code table. |

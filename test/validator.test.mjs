@@ -191,3 +191,46 @@ test('docs/rules.md lists every rule the validator can emit', async () => {
   assert.deepEqual(missing, []);
   assert.ok(ids.length >= 60, `expected 60+ rules, found ${ids.length}`);
 });
+
+// ─── Segments, element lengths and addresses ─────────────────────────────────
+
+const ADDR = (n4 = 'N4*Chicago*IL*60601') => ['N3*100 Main St', n4];
+
+test('a member with a complete US address stays clean', () => {
+  const r = run({ members: [SUBSCRIBER({ address: ADDR() }), DEPENDENT({ address: ['N3*100 Main St', 'N4*Chicago*IL*606011234'] })] });
+  assert.deepEqual(r.findings, []);
+});
+
+test('a foreign address with N404 skips US state and ZIP checks', () => {
+  const r = run({ members: [SUBSCRIBER({ address: ADDR('N4*Toronto*ON*M5V2T6*CA') }), DEPENDENT()] });
+  assert.deepEqual(r.findings, []);
+});
+
+test('SEG-UNKNOWN fires on a segment that is not part of an 834', () => {
+  fires('SEG-UNKNOWN', { members: [SUBSCRIBER({ extraRefs: ['CLM*1*100'] }), DEPENDENT()] });
+});
+
+test('ELEM-LENGTH fires on an over-long last name and plan description', () => {
+  const r = fires('ELEM-LENGTH', { members: [SUBSCRIBER({ name: ['X'.repeat(61), 'Jane'] }), DEPENDENT()] });
+  assert.ok(!JSON.stringify(r.findings).includes('X'.repeat(61)), 'value must not be echoed');
+  fires('ELEM-LENGTH', { members: [SUBSCRIBER({ coverages: [{ hd: ['021', '', 'HLT', 'P'.repeat(51), 'FAM'], begin: '20260101' }] }), DEPENDENT()] });
+});
+
+test('ADDR-STATE and ADDR-ZIP fire on bad US values without echoing them', () => {
+  const r = run({ members: [SUBSCRIBER({ address: ADDR('N4*Chicago*Illinois*60601-1234') }), DEPENDENT()] });
+  assert.ok(rules(r).includes('ADDR-STATE'));
+  assert.ok(rules(r).includes('ADDR-ZIP'));
+  assert.ok(!JSON.stringify(r.findings).includes('60601-1234'));
+});
+
+test('ADDR-CITY, ADDR-STREET, ADDR-N3-MISSING and ADDR-N4-MISSING fire', () => {
+  fires('ADDR-CITY', { members: [SUBSCRIBER({ address: ADDR('N4**IL*60601') }), DEPENDENT()] });
+  fires('ADDR-STREET', { members: [SUBSCRIBER({ address: ['N3*', 'N4*Chicago*IL*60601'] }), DEPENDENT()] });
+  fires('ADDR-N3-MISSING', { members: [SUBSCRIBER({ address: ['N4*Chicago*IL*60601'] }), DEPENDENT()] });
+  fires('ADDR-N4-MISSING', { members: [SUBSCRIBER({ address: ['N3*100 Main St'] }), DEPENDENT()] });
+});
+
+test('the mailing address loop (2100C) is checked separately', () => {
+  const r = fires('ADDR-ZIP', { members: [SUBSCRIBER({ address: [...ADDR(), 'NM1*31*1', 'N3*PO Box 5', 'N4*Chicago*IL*ABCDE'] }), DEPENDENT()] });
+  assert.ok(r.findings.some(f => f.rule === 'ADDR-ZIP' && f.message.includes('mailing address (2100C)')));
+});

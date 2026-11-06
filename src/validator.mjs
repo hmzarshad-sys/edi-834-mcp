@@ -14,6 +14,7 @@ import { parse834, e, memberRef, findDtp, dtpDates, parseD8, formatDate } from '
 import {
   IMPLEMENTATION_GUIDE, BGN_PURPOSE, BGN_ACTION, RELATIONSHIP, MAINTENANCE_TYPE, MAINTENANCE_REASON,
   BENEFIT_STATUS, EMPLOYMENT_STATUS, INSURANCE_LINE, COVERAGE_LEVEL, SINGLE_COVERAGE, GENDER,
+  KNOWN_SEGMENTS, ELEMENT_MAX, US_STATES,
 } from './codes.mjs';
 import { memberLabel } from './mask.mjs';
 
@@ -37,6 +38,7 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
 
   const model = parse834(raw);
   validateEnvelope(model, add);
+  validateSegments(model, add);
 
   let memberIndex = 0;
   for (const tx of model.transactions) {
@@ -217,6 +219,9 @@ function validateMember(m, label, ctx) {
     if (g && !GENDER[g]) add('error', 'DMG-GENDER', m.dmg, `${label}: gender code "${g}" is not valid.`, 'Use F, M or U.');
   }
 
+  // Addresses (N3/N4 in 2100A residence, 2100C mailing and other name loops)
+  validateAddresses(m, label, add);
+
   // Member-level dates
   for (const d of m.dtps) checkDtpFormat(d, label, add);
 
@@ -291,6 +296,51 @@ function validateFamilies(families, tx, add) {
       }
     }
   }
+}
+
+// ─── Segment-level checks (all segments) ─────────────────────────────────────
+
+function validateSegments(model, add) {
+  for (const seg of model.segments) {
+    if (!KNOWN_SEGMENTS.has(seg.id)) {
+      add('error', 'SEG-UNKNOWN', seg, `Segment "${seg.id}" is not part of an 834 (005010X220A1).`, 'Remove it or correct the segment ID; carriers reject files with segments that do not belong to the transaction set.');
+      continue;
+    }
+    const limits = ELEMENT_MAX[seg.id];
+    if (!limits) continue;
+    for (const [n, [name, max]] of Object.entries(limits)) {
+      const len = e(seg, Number(n)).length;
+      if (len > max) add('error', 'ELEM-LENGTH', seg, `${name} is ${len} characters; the maximum is ${max}.`, 'Shorten the value at the source (or truncate it in the integration). Carriers reject elements longer than the implementation guide allows.');
+    }
+  }
+}
+
+// ─── Addresses (N3/N4) ───────────────────────────────────────────────────────
+// Values are never echoed: addresses are PII.
+
+const ADDRESS_LOOPS = { IL: 'residence address (2100A)', '31': 'mailing address (2100C)' };
+
+function validateAddresses(m, label, add) {
+  let context = m.nm1 ? 'IL' : null;
+  let n3 = null;
+  const check = (n4) => {
+    const where = `${label}, ${ADDRESS_LOOPS[context] || 'address'}`;
+    if (n3 && !e(n3, 1)) add('error', 'ADDR-STREET', n3, `${where}: street address (N301) is empty.`, 'Send the first address line, or omit N3/N4 if the carrier does not need an address.');
+    if (n4 && !n3) add('error', 'ADDR-N3-MISSING', n4, `${where}: city/state/ZIP (N4) is sent without a street address (N3).`, 'Send N3 before N4 in the same loop.');
+    if (n3 && !n4) { add('error', 'ADDR-N4-MISSING', n3, `${where}: street address (N3) is sent without city/state/ZIP (N4).`, 'Send N4 right after N3.'); return; }
+    if (!n4) return;
+    if (!e(n4, 1)) add('error', 'ADDR-CITY', n4, `${where}: city (N401) is empty.`, 'Send the city name.');
+    const country = e(n4, 4);
+    if (country && country !== 'US') return;
+    if (!US_STATES.has(e(n4, 2))) add('error', 'ADDR-STATE', n4, `${where}: state (N402) is missing or not a valid US state code.`, 'Use the 2-letter USPS code (e.g. IL). For a foreign address, send the country in N404.');
+    if (!/^\d{5}(\d{4})?$/.test(e(n4, 3))) add('error', 'ADDR-ZIP', n4, `${where}: ZIP code (N403) is missing or not 5 or 9 digits.`, 'Send 5 or 9 digits with no dash or spaces (e.g. 60601 or 606011234).');
+  };
+  for (const seg of m.other) {
+    if (seg.id === 'NM1') { if (n3) check(null); n3 = null; context = e(seg, 1); }
+    else if (seg.id === 'N3') { if (n3) check(null); n3 = seg; }
+    else if (seg.id === 'N4') { check(seg); n3 = null; }
+  }
+  if (n3) check(null);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
