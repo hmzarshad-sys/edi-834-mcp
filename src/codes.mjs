@@ -126,3 +126,32 @@ export const CODE_TABLES = {
   gender: { element: 'DMG03', table: GENDER },
   id_qualifier: { element: 'NM108', table: ID_QUALIFIER },
 };
+
+// Segment IDs used anywhere in a 005010X220A1 transaction, including the envelope.
+// Anything else is a typo or a segment from another transaction set.
+export const KNOWN_SEGMENTS = new Set([
+  'ISA', 'IEA', 'GS', 'GE', 'ST', 'SE', 'BGN', 'REF', 'DTP', 'QTY', 'N1', 'ACT', 'INS', 'NM1', 'PER',
+  'N3', 'N4', 'DMG', 'EC', 'ICM', 'AMT', 'HLH', 'LUI', 'DSB', 'HD', 'IDC', 'LX', 'PRV', 'PLA', 'COB',
+  'LS', 'LE',
+]);
+
+// Maximum element lengths from 005010X220A1 for free-text and ID elements that
+// HR systems commonly overflow. Key: segment ID, value: { element number: [name, max] }.
+export const ELEMENT_MAX = {
+  BGN: { 2: ['BGN02 reference number', 50] },
+  N1: { 2: ['N102 name', 60], 4: ['N104 identification code', 80] },
+  REF: { 2: ['REF02 reference identification', 50] },
+  NM1: { 3: ['NM103 last name', 60], 4: ['NM104 first name', 35], 5: ['NM105 middle name', 25], 9: ['NM109 identification code', 80] },
+  N3: { 1: ['N301 address line', 55], 2: ['N302 address line', 55] },
+  N4: { 1: ['N401 city', 30], 2: ['N402 state code', 2], 3: ['N403 postal code', 15], 4: ['N404 country code', 3] },
+  PER: { 2: ['PER02 contact name', 60], 4: ['PER04 communication number', 256] },
+  HD: { 4: ['HD04 plan coverage description', 50], 5: ['HD05 coverage level', 3] },
+};
+
+// US states, DC, territories and military "states" accepted in N402 for US addresses.
+export const US_STATES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS',
+  'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC',
+  'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+  'AS', 'GU', 'MP', 'PR', 'VI', 'FM', 'MH', 'PW', 'AA', 'AE', 'AP',
+]);

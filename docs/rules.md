@@ -28,6 +28,13 @@ Rules marked *(profile)* only run when a carrier profile turns them on.
 | ENV-CONTROL-ST | error | SE02 does not match ST02 |
 | ENV-SEGMENT-COUNT | error | SE01 does not equal the segments from ST to SE |
 
+## Segments and element lengths
+
+| Rule | Severity | What it catches |
+|---|---|---|
+| SEG-UNKNOWN | error | Segment ID that is not part of an 834 (typo or wrong transaction set) |
+| ELEM-LENGTH | error | Name, ID, address, plan description or other element longer than 005010X220A1 allows |
+
 ## Transaction header
 
 | Rule | Severity | What it catches |
@@ -69,6 +76,12 @@ Rules marked *(profile)* only run when a carrier profile turns them on.
 | DMG-DOB-FUTURE | error | Birth date in the future |
 | DEP-AGE | warning | Child dependent at or over the age limit (default 26) |
 | DMG-GENDER | error | Gender not F, M or U |
+| ADDR-STREET | error | Address loop with an empty street line (N301) |
+| ADDR-N3-MISSING | error | N4 (city/state/ZIP) without an N3 street line |
+| ADDR-N4-MISSING | error | N3 street line without N4 city/state/ZIP |
+| ADDR-CITY | error | Empty city (N401) |
+| ADDR-STATE | error | US address without a valid 2-letter state code (N402) |
+| ADDR-ZIP | error | US address whose ZIP (N403) is not 5 or 9 digits |
 | NO-COVERAGE | warning | Member has no HD coverage loop |
 
 ## Coverage (HD loop)

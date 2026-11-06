@@ -204,6 +204,8 @@ const BENEFIT_DATES = { where: 'Worker\'s benefit event / election in Workday; C
 const DEMOGRAPHICS = { where: 'ISSG domain permissions (Person Data: Date of Birth / Gender); the worker or dependent record', how: 'If the value is blank for many people, the ISU is missing the Person Data domain: add it and run Activate Pending Security Policy Changes. If it is one person, correct their personal data.' };
 const NATIONAL_ID = { where: 'ISSG domain permissions (Person Data: ID Information, Worker Data: Dependent National IDs); Configure Integration Field Attributes (NM108/NM109)', how: 'Blank IDs across many dependents usually mean the Dependent National IDs domain is missing. For one person, correct the national ID on their record.' };
 
+const ADDRESS = { where: 'Worker or dependent home / mailing address in Workday; Configure Integration Field Attributes (N3/N4)', how: 'Correct the address on the person\'s record. If many dependents lack addresses, they may not have one entered; ask whether the carrier needs dependent addresses or exclude N3/N4 for dependents in Field Attributes.' };
+
 export const WORKDAY_HINTS = {
   'ENV-ISA-FIELDS': { where: 'Configure Integration Attributes > Header elements (ISA06, ISA08)', how: 'Check that the sender and receiver IDs are within 15 characters and contain no delimiter characters (* ~ : ^). Otherwise see the envelope note: the file was likely altered after generation.' },
   'ENV-IEA-MISSING': ENVELOPE, 'ENV-CONTROL-ISA': ENVELOPE, 'ENV-COUNT-GS': ENVELOPE, 'ENV-GS-MISSING': ENVELOPE,
@@ -246,6 +248,9 @@ export const WORKDAY_HINTS = {
   'FUTURE': { where: 'Worker\'s benefit election; benefit plan year setup', how: 'Check the coverage begin date and the plan year (a wrong year is the usual cause).' },
   'TERM-NO-END': { where: 'Configure Integration Services (transmission service ended-coverage handling)', how: 'Use a service that reports ended coverages (Changes Only, Full File with Ended Coverage History, or Report All Ended Coverages Once). Actives Only never sends terminations.' },
   'END-ON-ACTIVE': { where: 'Benefit plan year setup; worker\'s benefit election', how: 'Usually the plan year end date. Confirm the carrier wants it, or exclude the element in Field Attributes if their guide says so.' },
+  'SEG-UNKNOWN': { where: 'Configure Integration Field Overrides; any post-processing step', how: 'The template only writes 834 segments. An unknown segment usually comes from a custom override or from editing or merging the file after Workday.' },
+  'ELEM-LENGTH': { where: 'The worker or dependent record; Configure Integration Field Overrides (to truncate)', how: 'Shorten the value on the person\'s record, or add a field override that truncates it to the carrier\'s limit. Long names, plan descriptions and address lines are the usual cause.' },
+  'ADDR-STREET': ADDRESS, 'ADDR-N3-MISSING': ADDRESS, 'ADDR-N4-MISSING': ADDRESS, 'ADDR-CITY': ADDRESS, 'ADDR-STATE': ADDRESS, 'ADDR-ZIP': ADDRESS,
   'TIER-MISMATCH': { where: 'Configure Integration Maps > Loop2300_HD05; the worker\'s election (covered dependents)', how: 'Either a coverage target is mapped to EMP by mistake, or dependents are attached to an employee-only election. Check the map first: it affects everyone on that tier.' },
 };
 

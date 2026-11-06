@@ -19,6 +19,7 @@ export const SUBSCRIBER = (o = {}) => ({
   gender: o.gender ?? 'F',
   coverages: o.coverages ?? [{ hd: ['021', '', 'HLT', 'PPO-GOLD', 'FAM'], begin: '20260101' }],
   extraRefs: o.extraRefs ?? [],
+  address: o.address ?? null,
 });
 
 export const DEPENDENT = (o = {}) => ({
@@ -30,6 +31,7 @@ export const DEPENDENT = (o = {}) => ({
   gender: o.gender ?? 'M',
   coverages: o.coverages ?? [{ hd: ['021', '', 'HLT', 'PPO-GOLD'], begin: '20260101' }],
   extraRefs: o.extraRefs ?? [],
+  address: o.address ?? null,
 });
 
 function memberSegments(m) {
@@ -38,6 +40,7 @@ function memberSegments(m) {
   if (m.sub !== null) s.push(`REF*0F*${m.sub}`);
   for (const r of m.extraRefs) s.push(r);
   s.push(m.ssn ? `NM1*IL*1*${m.name[0]}*${m.name[1]}****34*${m.ssn}` : `NM1*IL*1*${m.name[0]}*${m.name[1]}`);
+  if (m.address) s.push(...m.address);
   if (m.dob !== null) s.push(`DMG*D8*${m.dob}*${m.gender}`);
   for (const c of m.coverages) {
     s.push(['HD', ...c.hd].join('*'));
