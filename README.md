@@ -38,6 +38,22 @@ See [SECURITY.md](SECURITY.md).
 
 The full rule list is in [docs/rules.md](docs/rules.md).
 
+## Web UI
+
+Prefer a screen to a chat? The same validator runs as a web page:
+
+```bash
+npm run ui          # opens on http://localhost:8834
+```
+
+Drop in an 834 file to validate it, compare two files, or look up a code. Pick **Workday CCB 834 V2** as the source system to see where in Workday to fix each finding. The page validates files in your browser: the local server only serves the page and never receives your files.
+
+To get one self-contained HTML file you can open offline or share with your team:
+
+```bash
+npm run build:ui    # writes dist/edi-834-validator.html
+```
+
 ## Install
 
 Requires **Node.js 18+**.
