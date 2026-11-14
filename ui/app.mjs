@@ -161,7 +161,7 @@ function renderValidate({ file, platform, result, summary }) {
 
   const report = h('div', { class: 'card' },
     h('div', { class: 'verdict' },
-      h('div', {}, h('h2', { style: 'margin:0' }, 'Validation report'), h('div', { class: 'muted' }, file, ' · ', result.profile)),
+      h('div', {}, h('h2', { style: 'margin:0' }, 'Validation report'), h('div', { class: 'muted' }, file, ' · ', result.profile, ' · ', platform === 'workday_ccb_834_v2' ? 'Source: Workday CCB 834 V2' : 'Source: any system')),
       h('span', { class: `badge ${verdict[0]}` }, verdict[1]),
     ),
     h('div', { class: 'metrics' },
