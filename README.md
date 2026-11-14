@@ -2,11 +2,13 @@
 
 Catch benefit enrollment errors before they reach the carrier.
 
+**[Try the validator in your browser](https://hmzarshad-sys.github.io/edi-834-mcp/)**: no install, no account. Your file is checked on your own device and never uploaded.
+
 U.S. employers send employee health, dental, vision and other benefit enrollments to insurance carriers as **HIPAA X12 834** files. When a file has errors, the carrier rejects records or enrolls people wrongly. Workers often find out at the pharmacy or the doctor's office that their coverage is missing.
 
 This MCP server lets Claude check 834 files the way an experienced benefits integration analyst would, locally, on your machine:
 
-- **Validate** a file against the 005010X220A1 standard and your carrier's companion-guide rules: 72 rules, each with a plain-English message and a fix.
+- **Validate** a file against the 005010X220A1 standard and your carrier's companion-guide rules: 74 rules, each with a plain-English message and a fix.
 - **Compare** this week's file with last week's to catch dropped dependents, unintended terminations and tier changes before the carrier processes them.
 - **Summarize** what a file will do: adds, changes, terminations, coverage lines and tiers.
 - **Explain** any 834 code (relationship, maintenance type, coverage level...).
@@ -40,7 +42,7 @@ The full rule list is in [docs/rules.md](docs/rules.md).
 
 ## Web UI
 
-Prefer a screen to a chat? The same validator runs as a web page:
+Prefer a screen to a chat? The same validator runs as a web page. Use it online at **https://hmzarshad-sys.github.io/edi-834-mcp/**, or run it yourself:
 
 ![Validation report in the web UI: each finding with its rule, segment and fix](docs/images/validation-report.png)
 
