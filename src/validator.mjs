@@ -14,7 +14,7 @@ import { parse834, e, memberRef, findDtp, dtpDates, parseD8, formatDate } from '
 import {
   IMPLEMENTATION_GUIDE, BGN_PURPOSE, BGN_ACTION, RELATIONSHIP, MAINTENANCE_TYPE, MAINTENANCE_REASON,
   BENEFIT_STATUS, EMPLOYMENT_STATUS, INSURANCE_LINE, COVERAGE_LEVEL, SINGLE_COVERAGE, GENDER,
-  KNOWN_SEGMENTS, ELEMENT_MAX, US_STATES,
+  KNOWN_SEGMENTS, ELEMENT_MAX, US_STATES, MAX_USE,
 } from './codes.mjs';
 import { memberLabel } from './mask.mjs';
 
@@ -154,6 +154,9 @@ function validateHeader(tx, add, p) {
           : 'Send a change file (BGN08 2), or update the profile if the carrier now wants full files. A full file sent by mistake can terminate members left out of it.');
     }
   }
+  for (const d of tx.header.filter(s => s.id === 'DTP')) checkDtpFormat(d, 'File header', add);
+  maxUse(tx.header.filter(s => s.id === 'REF'), 'header_ref', 'File header', add);
+  maxUse(tx.header.filter(s => s.id === 'N1' && !['P5', 'IN'].includes(e(s, 1))), 'header_n1_other', 'File header', add);
   if (!tx.sponsor) add('error', 'HDR-SPONSOR', tx.bgn || tx.st, 'Sponsor (N1*P5, loop 1000A) is missing.', 'Add N1*P5 with the employer name and ID.');
   if (!tx.payer) add('error', 'HDR-PAYER', tx.bgn || tx.st, 'Payer (N1*IN, loop 1000B) is missing.', 'Add N1*IN with the carrier or administrator name and ID.');
   if (tx.members.length === 0) add('warning', 'HDR-NO-MEMBERS', tx.st, 'The transaction contains no members (no INS segments).', 'An empty file is valid only if the carrier expects one when there are no changes.');
@@ -231,8 +234,13 @@ function validateMember(m, label, ctx) {
   // Addresses (N3/N4 in 2100A residence, 2100C mailing and other name loops)
   validateAddresses(m, label, add);
 
-  // Member-level dates
+  // Member-level dates (2000) and dates in later name loops (e.g. 2200 disability)
   for (const d of m.dtps) checkDtpFormat(d, label, add);
+  for (const d of m.other.filter(s => s.id === 'DTP')) checkDtpFormat(d, label, add);
+  maxUse(m.refs.filter(r => e(r, 1) === '17'), 'member_ref_17', label, add);
+  maxUse(m.dtps, 'member_dtp', label, add);
+  maxUse(m.other.filter(s => s.id === 'AMT'), 'member_amt', label, add);
+  if (m.coverages.length) maxUse(m.coverages.map(c => c.hd), 'coverages', label, add);
 
   if (m.coverages.length === 0 && mType !== '024') {
     add('warning', 'NO-COVERAGE', ins, `${label}: member has no coverage (HD) segments.`, 'Send at least one HD loop with the plan, unless the carrier accepts demographic-only changes.');
@@ -260,6 +268,9 @@ function validateCoverage(c, m, label, { add, p, fileDate }) {
   if (e(m.ins, 1) === 'Y' && type !== '024' && !level) add('warning', 'HD05-MISSING', hd, `${where}: subscriber coverage has no coverage level (HD05).`, 'Send the tier the employee elected, e.g. EMP or FAM.');
 
   for (const d of c.dtps) checkDtpFormat(d, where, add);
+  maxUse(c.dtps, 'coverage_dtp', where, add);
+  maxUse(c.other.filter(s => s.id === 'AMT'), 'coverage_amt', where, add);
+  maxUse(c.refs, 'coverage_ref', where, add);
   const begin = findDtp(c.dtps, '348');
   const end = findDtp(c.dtps, '349');
   if (!begin) {
@@ -353,6 +364,14 @@ function validateAddresses(m, label, add) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function maxUse(segs, key, where, add) {
+  const { max, label } = MAX_USE[key];
+  if (segs.length > max) {
+    add('error', 'SEG-MAX-USE', segs[max], `${where}: ${segs.length} ${label}; the implementation guide allows ${max}.`,
+      'Remove the extra segments or loops. Carriers reject files that repeat a segment more often than 005010X220A1 allows; extra repeats usually come from a custom field, a duplicated mapping or merged records.');
+  }
+}
 
 function checkDtpFormat(d, where, add) {
   const fmt = e(d, 2);

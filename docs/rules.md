@@ -32,6 +32,7 @@ Rules marked *(profile)* only run when a carrier profile turns them on.
 
 | Rule | Severity | What it catches |
 |---|---|---|
+| SEG-MAX-USE | error | A segment or loop repeats more often than 005010X220A1 allows (e.g. more than 6 DTP or 14 REF in one HD loop, 99 HD loops per member, 24 member-level DTP) |
 | SEG-UNKNOWN | error | Segment ID that is not part of an 834 (typo or wrong transaction set) |
 | ELEM-LENGTH | error | Name, ID, address, plan description or other element longer than 005010X220A1 allows |
 
@@ -102,8 +103,8 @@ Rules marked *(profile)* only run when a carrier profile turns them on.
 | TERM-NO-END | error | Termination without a benefit end date |
 | END-BEFORE-BEGIN | error | End date before begin date |
 | END-ON-ACTIVE | info | End date on coverage not marked as terminated |
-| DTP-FORMAT | error | Date format other than D8 or RD8 |
-| DTP-DATE | error | Date value that is not a real calendar date |
+| DTP-FORMAT | error | Date format other than D8 or RD8 (any DTP: heading, member, disability or coverage) |
+| DTP-DATE | error | Date value that is not a real calendar date (any DTP: heading, member, disability or coverage) |
 | TIER-MISMATCH | warning | Employee-only tier with dependents enrolled on the same line |
 
 ## compare_834 change types

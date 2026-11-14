@@ -242,3 +242,48 @@ test('the mailing address loop (2100C) is checked separately', () => {
   const r = fires('ADDR-ZIP', { members: [SUBSCRIBER({ address: [...ADDR(), 'NM1*31*1', 'N3*PO Box 5', 'N4*Chicago*IL*ABCDE'] }), DEPENDENT()] });
   assert.ok(r.findings.some(f => f.rule === 'ADDR-ZIP' && f.message.includes('mailing address (2100C)')));
 });
+
+// ─── Full 834 structure (heading, 2100A–2200 extras, segment limits) ─────────
+
+const sub = (o = {}) => SUBSCRIBER(o);
+const cov = (extra) => [{ hd: ['030', '', 'HLT', 'PPO-GOLD', 'FAM'], begin: '20260101', extra }];
+
+test('a file using the optional loops of the 834 structure stays clean', () => {
+  const r = run({
+    headerExtra: ['REF*38*POLICY123', 'DTP*007*D8*20260101', 'N1*BO*Example Broker*94*B123', 'ACT*ACCT77'],
+    members: [
+      sub({
+        extraRefs: ['REF*17*EMPNO1'],
+        extra: ['PER*IP**HP*5555550100', 'AMT*C1*250', 'NM1*31*1', 'N3*PO BOX 10', 'N4*CHICAGO*IL*60601', 'DSB*2', 'DTP*360*D8*20250601'],
+        coverages: cov(['DTP*303*D8*20260101', 'AMT*P3*100', 'REF*X9*INT1']),
+      }),
+      DEPENDENT(),
+    ],
+  });
+  assert.deepEqual(rules(r), []);
+});
+
+test('dates in the heading and in the disability loop are checked', () => {
+  fires('DTP-DATE', { headerExtra: ['DTP*007*D8*20261340'] });
+  fires('DTP-DATE', { members: [sub({ extra: ['DSB*2', 'DTP*360*D8*20250631'] }), DEPENDENT()] });
+});
+
+test('segments repeated beyond the implementation guide limits are rejected', () => {
+  fires('SEG-MAX-USE', { headerExtra: ['REF*38*A', 'REF*38*B'] });
+  fires('SEG-MAX-USE', { headerExtra: ['N1*BO*B1*94*1', 'N1*TV*T1*94*2', 'N1*BO*B2*94*3'] });
+  const dtps = Array.from({ length: 6 }, () => 'DTP*303*D8*20260101');
+  fires('SEG-MAX-USE', { members: [sub({ coverages: cov(dtps) }), DEPENDENT()] }); // 348 + 6 = 7 DTP
+  const refs = Array.from({ length: 15 }, (_, i) => `REF*X9*R${i}`);
+  fires('SEG-MAX-USE', { members: [sub({ coverages: cov(refs) }), DEPENDENT()] });
+  const amts = Array.from({ length: 8 }, () => 'AMT*C1*1');
+  fires('SEG-MAX-USE', { members: [sub({ extra: amts }), DEPENDENT()] });
+  const many = Array.from({ length: 100 }, (_, i) => ({ hd: ['030', '', 'HLT', `P${i}`, 'FAM'], begin: '20260101' }));
+  fires('SEG-MAX-USE', { members: [sub({ coverages: many }), DEPENDENT()] });
+});
+
+test('segments at the limit are accepted', () => {
+  const dtps = Array.from({ length: 5 }, () => 'DTP*303*D8*20260101');
+  assert.ok(!rules(run({ members: [sub({ coverages: cov(dtps) }), DEPENDENT()] })).includes('SEG-MAX-USE'));
+  const refs = Array.from({ length: 14 }, (_, i) => `REF*X9*R${i}`);
+  assert.ok(!rules(run({ members: [sub({ coverages: cov(refs) }), DEPENDENT()] })).includes('SEG-MAX-USE'));
+});

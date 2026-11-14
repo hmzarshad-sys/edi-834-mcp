@@ -73,6 +73,7 @@ export const EN_HINTS = {
   'FUTURE': { where: 'The employee\'s enrollment; plan year setup', how: 'Check the coverage effective date and the plan year (a wrong year is the usual cause).' },
   'TERM-NO-END': { where: `${field('2300 DTP*349 (benefit end date)')}; the employee's enrollment`, how: 'Make sure the benefit end date is mapped and the termination has an end date in EN.' },
   'END-ON-ACTIVE': { where: `${field('2300 DTP*349 (benefit end date)')}; plan year setup`, how: `Usually the plan year end date. Confirm the carrier wants it, or stop sending it for active coverage. ${DEFAULT_VALUE}` },
+  'SEG-MAX-USE': { where: `${FILE} > Fields; the employee's enrollments; any step that edits the file after EN`, how: 'Extra repeats usually come from a custom field mapped more than once, duplicate enrollments for the same plan, or merging files after EN. Check this person\'s enrollments and the Fields step for the repeated segment.' },
   'SEG-UNKNOWN': { where: `${FILE} > Fields; any step that edits the file after EN`, how: 'EN writes only 834 segments. An unknown segment usually comes from a custom field value or from editing or merging the file after EN.' },
   'ELEM-LENGTH': { where: `${FILE} > Fields; the person's record`, how: 'Shorten the value on the record or in the field mapping. Long names, plan descriptions, address lines and sender codes over 15 characters are the usual cause.' },
   'ADDR-STREET': ADDRESS, 'ADDR-N3-MISSING': ADDRESS, 'ADDR-N4-MISSING': ADDRESS, 'ADDR-CITY': ADDRESS, 'ADDR-STATE': ADDRESS, 'ADDR-ZIP': ADDRESS,

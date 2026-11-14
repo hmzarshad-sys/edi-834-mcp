@@ -156,6 +156,10 @@ The fix table: [docs/employee-navigator.md](docs/employee-navigator.md).
 
 Each system lives in its own file under `src/` (see `src/employee-navigator.mjs`) and is registered in `src/platforms.mjs`. A system adds a fix location for every validator rule and, optionally, validation defaults. The MCP tool and the web UI pick it up automatically, and `npm test` fails if any rule has no fix location. Contributions for UKG, ADP, Oracle and SAP SuccessFactors are welcome from people who use them.
 
+## How the 834 is structured
+
+[docs/834-structure.md](docs/834-structure.md) maps every loop and segment of the 834 (heading, member, name, disability and coverage loops) to the rules that check it.
+
 ## Carrier profiles
 
 Carriers publish companion guides that tighten the standard. Put their rules in a JSON file inside `EDI_834_DIR` and pass `profile_path`:
