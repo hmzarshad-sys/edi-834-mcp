@@ -161,6 +161,14 @@ test('profile restricts insurance lines and coverage levels', () => {
   assert.ok(rules(r).includes('HD03-PROFILE'));
   assert.ok(rules(r).includes('HD05-PROFILE'));
 });
+test('profile can require a full or a change file', () => {
+  fires('HDR-FILE-TYPE', { action: '2' }, { profile: { expected_file_type: 'full' } });
+  fires('HDR-FILE-TYPE', { action: 'RX' }, { profile: { expected_file_type: 'change' } });
+  assert.ok(!rules(run({ action: 'RX' }, { profile: { expected_file_type: 'full' } })).includes('HDR-FILE-TYPE'));
+  assert.ok(!rules(run({ action: '2' }, { profile: { expected_file_type: 'change' } })).includes('HDR-FILE-TYPE'));
+  assert.ok(!rules(run({ action: '2' })).includes('HDR-FILE-TYPE'));
+});
+
 test('profile can require a group number', () => {
   fires('REF-1L', {}, { profile: { require_group_number: true } });
   const ok = run({ members: [SUBSCRIBER({ extraRefs: ['REF*1L*GRP100'] }), DEPENDENT({ extraRefs: ['REF*1L*GRP100'] })] }, { profile: { require_group_number: true } });
@@ -233,4 +241,92 @@ test('ADDR-CITY, ADDR-STREET, ADDR-N3-MISSING and ADDR-N4-MISSING fire', () => {
 test('the mailing address loop (2100C) is checked separately', () => {
   const r = fires('ADDR-ZIP', { members: [SUBSCRIBER({ address: [...ADDR(), 'NM1*31*1', 'N3*PO Box 5', 'N4*Chicago*IL*ABCDE'] }), DEPENDENT()] });
   assert.ok(r.findings.some(f => f.rule === 'ADDR-ZIP' && f.message.includes('mailing address (2100C)')));
+});
+
+// ─── Full 834 structure (heading, 2100A–2200 extras, segment limits) ─────────
+
+const sub = (o = {}) => SUBSCRIBER(o);
+const cov = (extra) => [{ hd: ['030', '', 'HLT', 'PPO-GOLD', 'FAM'], begin: '20260101', extra }];
+
+test('a file using the optional loops of the 834 structure stays clean', () => {
+  const r = run({
+    headerExtra: ['REF*38*POLICY123', 'DTP*007*D8*20260101', 'N1*BO*Example Broker*94*B123', 'ACT*ACCT77'],
+    members: [
+      sub({
+        extraRefs: ['REF*17*EMPNO1'],
+        extra: ['PER*IP**HP*5555550100', 'AMT*C1*250', 'NM1*31*1', 'N3*PO BOX 10', 'N4*CHICAGO*IL*60601', 'DSB*2', 'DTP*360*D8*20250601'],
+        coverages: cov(['DTP*303*D8*20260101', 'AMT*P3*100', 'REF*X9*INT1']),
+      }),
+      DEPENDENT(),
+    ],
+  });
+  assert.deepEqual(rules(r), []);
+});
+
+test('dates in the heading and in the disability loop are checked', () => {
+  fires('DTP-DATE', { headerExtra: ['DTP*007*D8*20261340'] });
+  fires('DTP-DATE', { members: [sub({ extra: ['DSB*2', 'DTP*360*D8*20250631'] }), DEPENDENT()] });
+});
+
+test('segments repeated beyond the implementation guide limits are rejected', () => {
+  fires('SEG-MAX-USE', { headerExtra: ['REF*38*A', 'REF*38*B'] });
+  fires('SEG-MAX-USE', { headerExtra: ['N1*BO*B1*94*1', 'N1*TV*T1*94*2', 'N1*BO*B2*94*3'] });
+  const dtps = Array.from({ length: 6 }, () => 'DTP*303*D8*20260101');
+  fires('SEG-MAX-USE', { members: [sub({ coverages: cov(dtps) }), DEPENDENT()] }); // 348 + 6 = 7 DTP
+  const refs = Array.from({ length: 15 }, (_, i) => `REF*X9*R${i}`);
+  fires('SEG-MAX-USE', { members: [sub({ coverages: cov(refs) }), DEPENDENT()] });
+  const amts = Array.from({ length: 8 }, () => 'AMT*C1*1');
+  fires('SEG-MAX-USE', { members: [sub({ extra: amts }), DEPENDENT()] });
+  const many = Array.from({ length: 100 }, (_, i) => ({ hd: ['030', '', 'HLT', `P${i}`, 'FAM'], begin: '20260101' }));
+  fires('SEG-MAX-USE', { members: [sub({ coverages: many }), DEPENDENT()] });
+});
+
+test('segments at the limit are accepted', () => {
+  const dtps = Array.from({ length: 5 }, () => 'DTP*303*D8*20260101');
+  assert.ok(!rules(run({ members: [sub({ coverages: cov(dtps) }), DEPENDENT()] })).includes('SEG-MAX-USE'));
+  const refs = Array.from({ length: 14 }, (_, i) => `REF*X9*R${i}`);
+  assert.ok(!rules(run({ members: [sub({ coverages: cov(refs) }), DEPENDENT()] })).includes('SEG-MAX-USE'));
+});
+
+// ─── Provider, COB and reporting-category loops; corrected names; records ────
+
+test('2310, 2320 and 2700/2750 loops are not counted as coverage dates or policy numbers', () => {
+  const reporting = ['LS*2700'];
+  for (let i = 1; i <= 8; i++) reporting.push(`LX*${i}`, `N1*75*CATEGORY ${i}`, `REF*17*${i}`, 'DTP*007*D8*20260101');
+  reporting.push('LE*2700');
+  const r = run({ members: [sub({ coverages: cov([
+    'LX*1', 'NM1*Y2*2******SV*PROV1*72',
+    'COB*P*POLICY1*1', 'DTP*344*D8*20260101', 'DTP*345*D8*20261231',
+    ...reporting,
+  ]) }), DEPENDENT()] });
+  assert.deepEqual(rules(r), []);
+});
+
+test('dates inside reporting categories are still checked', () => {
+  fires('DTP-DATE', { members: [sub({ coverages: cov(['LS*2700', 'LX*1', 'N1*75*X', 'REF*17*1', 'DTP*007*RD8*20260101-20261340', 'LE*2700']) }), DEPENDENT()] });
+});
+
+test('NM1*74 (corrected name) is the member name; NM1*70 and its DMG are the prior name', () => {
+  const raw = build834({ members: [sub(), DEPENDENT()], seCountDelta: 2 }) // two segments are added below
+    .replace('NM1*IL*1*Doe*Jane****34*123451234~\nDMG*D8*19850214*F~', 'NM1*74*1*Doe*Jane****34*123451234~\nDMG*D8*19850214*F~\nNM1*70*1*Roe*Jane~\nDMG*D8*19850214*F~');
+  assert.match(raw, /NM1\*74/);
+  const r = validate834(raw, { today: TODAY });
+  assert.deepEqual(rules(r), []);
+});
+
+test('placeholder SSNs are a warning in test files and an error in production files', () => {
+  const bad = { members: [sub({ ssn: '999999991' }), DEPENDENT()] };
+  assert.equal(run({ ...bad, usage: 'T' }).findings.find(f => f.rule === 'SSN-INVALID').severity, 'warning');
+  assert.equal(run(bad).findings.find(f => f.rule === 'SSN-INVALID').severity, 'error');
+});
+
+test('every member gets a record with its status, coverages and no PII', () => {
+  const r = run({ members: [sub(), DEPENDENT({ dob: '20151331' }), sub({ sub: 'EMP2', name: ['Lee', 'Kim'], ssn: '123451235' })] });
+  assert.equal(r.records.length, 3);
+  assert.deepEqual(r.records.map(x => x.status), ['correct', 'error', 'correct']);
+  assert.equal(r.records_correct, 2);
+  assert.deepEqual(r.records[1].rules, ['DMG-DOB']);
+  assert.deepEqual(r.records[0].coverages[0], { line: 'Health', plan: 'PPO-GOLD', level: 'FAM', maintenance: 'Addition', begin: '2026-01-01', end: '' });
+  const text = JSON.stringify(r.records);
+  for (const pii of ['Doe', 'Jane', 'Lee', '123451234', '19850214']) assert.ok(!text.includes(pii), pii);
 });

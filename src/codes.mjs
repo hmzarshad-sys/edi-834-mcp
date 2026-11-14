@@ -137,6 +137,20 @@ export const KNOWN_SEGMENTS = new Set([
 
 // Maximum element lengths from 005010X220A1 for free-text and ID elements that
 // HR systems commonly overflow. Key: segment ID, value: { element number: [name, max] }.
+// Maximum use of repeating segments and loops (005010X220A1). Only limits that
+// real files exceed are listed; each is checked per loop occurrence.
+export const MAX_USE = {
+  header_ref: { max: 1, label: 'REF (transaction set policy number) in the heading' },
+  header_n1_other: { max: 2, label: 'TPA/broker N1 loops (1000C)' },
+  member_ref_17: { max: 13, label: 'REF*17 (member supplemental identifier) in loop 2000' },
+  member_dtp: { max: 24, label: 'DTP (member level dates) in loop 2000' },
+  member_amt: { max: 7, label: 'AMT (member policy amounts) in loop 2100A' },
+  coverages: { max: 99, label: 'HD loops (2300) for one member' },
+  coverage_dtp: { max: 6, label: 'DTP (health coverage dates) in one HD loop' },
+  coverage_amt: { max: 9, label: 'AMT (health coverage policy) in one HD loop' },
+  coverage_ref: { max: 14, label: 'REF (health coverage policy number) in one HD loop' },
+};
+
 export const ELEMENT_MAX = {
   BGN: { 2: ['BGN02 reference number', 50] },
   N1: { 2: ['N102 name', 60], 4: ['N104 identification code', 80] },

@@ -7,3 +7,6 @@ node_modules/
 *.x12
 *.txt
 !docs/*.txt
+
+# Browser build output (npm run build:ui)
+dist/

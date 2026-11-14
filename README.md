@@ -11,7 +11,7 @@ This MCP server lets Claude check 834 files the way an experienced benefits inte
 - **Summarize** what a file will do: adds, changes, terminations, coverage lines and tiers.
 - **Explain** any 834 code (relationship, maintenance type, coverage level...).
 
-It works with 834 files from any system: Workday, ADP, UKG, Oracle, SAP SuccessFactors or in-house payroll. For **Workday**, it also guides the connector setup and tells you where in Workday to fix each problem.
+It works with 834 files from any system: Workday, Employee Navigator, ADP, UKG, Oracle, SAP SuccessFactors or in-house payroll. For **Workday** and **Employee Navigator**, it also tells you where in that system to fix each problem, and for Workday it guides the connector setup.
 
 ## Privacy by design
 
@@ -37,6 +37,24 @@ See [SECURITY.md](SECURITY.md).
 | `get_default_profile` | The baseline settings a carrier profile can override. |
 
 The full rule list is in [docs/rules.md](docs/rules.md).
+
+## Web UI
+
+Prefer a screen to a chat? The same validator runs as a web page:
+
+![Validation report in the web UI: each finding with its rule, segment and fix](docs/images/validation-report.png)
+
+```bash
+npm run ui          # opens on http://localhost:8834
+```
+
+Drop in an 834 file to validate it, compare two files, or look up a code. Every member record is listed with what the file says about it (relationship, change type, coverages and dates) and whether it is correct or has issues. It works with 834 files from any system. Pick **Workday CCB 834 V2** or **Employee Navigator** as the source system to also see where in that system to fix each finding. The page validates files in your browser: the local server only serves the page and never receives your files.
+
+To get one self-contained HTML file you can open offline or share with your team:
+
+```bash
+npm run build:ui    # writes dist/edi-834-validator.html
+```
 
 ## Install
 
@@ -123,6 +141,25 @@ If your files come from Workday's **Cloud Connect for Benefits: ANSI X12 834 V2*
 
 The full guide and fix table: [docs/workday-ccb-834-v2.md](docs/workday-ccb-834-v2.md).
 
+## Employee Navigator
+
+If your files come from Employee Navigator's 834 EDI configuration, validate with `platform: "employee_navigator"`:
+
+> "Validate acme_full.edi as an Employee Navigator file"
+
+- Each finding says where to fix it: the Setup, Plans or Fields step of the 834 EDI file, or the employee's or dependent's record.
+- Employee Navigator sends full files only, so a file that is not a full file is flagged (HDR-FILE-TYPE). Anyone left out of a full file may be terminated, so run `compare_834` before every send.
+
+The fix table: [docs/employee-navigator.md](docs/employee-navigator.md).
+
+## Adding a source system
+
+Each system lives in its own file under `src/` (see `src/employee-navigator.mjs`) and is registered in `src/platforms.mjs`. A system adds a fix location for every validator rule and, optionally, validation defaults. The MCP tool and the web UI pick it up automatically, and `npm test` fails if any rule has no fix location. Contributions for UKG, ADP, Oracle and SAP SuccessFactors are welcome from people who use them.
+
+## How the 834 is structured
+
+[docs/834-structure.md](docs/834-structure.md) maps every loop and segment of the 834 (heading, member, name, disability and coverage loops) to the rules that check it.
+
 ## Carrier profiles
 
 Carriers publish companion guides that tighten the standard. Put their rules in a JSON file inside `EDI_834_DIR` and pass `profile_path`:
@@ -136,9 +173,12 @@ Carriers publish companion guides that tighten the standard. Put their rules in 
   "require_ssn": true,
   "max_retro_days": 60,
   "max_future_days": 120,
-  "dependent_age_limit": 26
+  "dependent_age_limit": 26,
+  "expected_file_type": "full"
 }
 ```
+
+`expected_file_type` (`"full"` or `"change"`) flags a file whose BGN08 says otherwise.
 
 > "Validate acme_20260105.edi with profile profiles/acme.json"
 
@@ -163,4 +203,4 @@ Run `npm test` before opening a PR. Every rule needs a test that fires on bad in
 
 MIT. Copyright (c) 2026 Humza Arshad. See [LICENSE](LICENSE).
 
-X12 and ASC X12 are trademarks of the Accredited Standards Committee X12. Workday is a trademark of Workday, Inc. This project is not affiliated with or endorsed by X12 or Workday.
+X12 and ASC X12 are trademarks of the Accredited Standards Committee X12. Workday is a trademark of Workday, Inc. Employee Navigator is a trademark of its owner. This project is not affiliated with or endorsed by X12, Workday or Employee Navigator.

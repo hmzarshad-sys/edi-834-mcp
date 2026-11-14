@@ -20,6 +20,7 @@ export const SUBSCRIBER = (o = {}) => ({
   coverages: o.coverages ?? [{ hd: ['021', '', 'HLT', 'PPO-GOLD', 'FAM'], begin: '20260101' }],
   extraRefs: o.extraRefs ?? [],
   address: o.address ?? null,
+  extra: o.extra ?? null,
 });
 
 export const DEPENDENT = (o = {}) => ({
@@ -32,6 +33,7 @@ export const DEPENDENT = (o = {}) => ({
   coverages: o.coverages ?? [{ hd: ['021', '', 'HLT', 'PPO-GOLD'], begin: '20260101' }],
   extraRefs: o.extraRefs ?? [],
   address: o.address ?? null,
+  extra: o.extra ?? null,
 });
 
 function memberSegments(m) {
@@ -42,10 +44,12 @@ function memberSegments(m) {
   s.push(m.ssn ? `NM1*IL*1*${m.name[0]}*${m.name[1]}****34*${m.ssn}` : `NM1*IL*1*${m.name[0]}*${m.name[1]}`);
   if (m.address) s.push(...m.address);
   if (m.dob !== null) s.push(`DMG*D8*${m.dob}*${m.gender}`);
+  if (m.extra) s.push(...m.extra); // more 2100A–2200 segments (AMT, NM1*31, DSB...)
   for (const c of m.coverages) {
     s.push(['HD', ...c.hd].join('*'));
     if (c.begin) s.push(`DTP*348*D8*${c.begin}`);
     if (c.end) s.push(`DTP*349*D8*${c.end}`);
+    if (c.extra) s.push(...c.extra); // more 2300 segments (DTP, AMT, REF)
   }
   return s;
 }
@@ -63,10 +67,12 @@ export function build834({
   omit = [],
   terminator = '~\n',
   usage = 'P',
+  headerExtra = [], // heading segments after BGN (REF, DTP, N1*BO, ACT...)
 } = {}) {
   const body = [
     `ST*834*${stControl}*${version}`,
     `BGN*00*REF${bgnDate}*${bgnDate}*1200****${action}`,
+    ...headerExtra,
     'N1*P5*Example Employer Inc*FI*123456789',
     'N1*IN*Example Health Plan*FI*987654321',
     ...members.flatMap(memberSegments),
