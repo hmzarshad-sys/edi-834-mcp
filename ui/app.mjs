@@ -10,6 +10,7 @@ import { summarize834, compare834 } from '../src/summary.mjs';
 import { PLATFORMS, platformProfile, withFixLocations } from '../src/platforms.mjs';
 import { explainCode } from '../src/explain.mjs';
 import { CODE_TABLES } from '../src/codes.mjs';
+import { describe834, format834, autoFix834, toJson834, AUTO_FIXABLE } from '../src/structure.mjs';
 import { SAMPLES } from './samples.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -150,25 +151,39 @@ function showError(view, message, suggestion) {
 
 // ─── Validate ────────────────────────────────────────────────────────────────
 let lastReport = null;
-const ui = { tab: 'records', sev: 'all', query: '', rec: 'all', open: -1 };
+const ui = { tab: 'records', sev: 'all', query: '', rec: 'all', open: -1, editing: false, seg: null, limit: 0 };
 
 function runValidate() {
   showError('validate', null);
   const pasted = $('paste-main').value.trim();
   const source = pasted ? { name: 'Pasted text', text: pasted } : files.main;
   if (!source) { showError('validate', 'Add a file first.', 'Drop an 834 file, paste its contents, or try a sample file.'); return; }
+  if (validateText(source.name, source.text)) $('validate-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Validates text and shows the results. Returns false if the text is not an 834.
+function validateText(name, text, { keepTab = false, notice = null } = {}) {
   const platform = $('platform').value;
   try {
-    const result = validate834(source.text, { profile: platformProfile(platform, profile), showPii: $('show-pii').checked });
+    const result = validate834(text, { profile: platformProfile(platform, profile), showPii: $('show-pii').checked });
     result.findings = withFixLocations(result.findings, platform);
-    const summary = summarize834(source.text);
-    lastReport = { file: source.name, platform, result, summary };
-    Object.assign(ui, { tab: result.counts.error || result.counts.warning ? 'records' : 'records', sev: 'all', query: '', rec: 'all', open: -1 });
+    const summary = summarize834(text);
+    lastReport = { file: name, text, platform, result, summary, notice };
+    Object.assign(ui, { tab: keepTab ? ui.tab : 'records', sev: 'all', query: '', rec: 'all', open: -1, editing: false, seg: null });
     renderValidate();
-    $('validate-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
   } catch (err) {
     showError('validate', `This file could not be read as an 834. ${err.message}`, err.suggestion);
+    return false;
   }
+}
+
+// Replace the current file with new text (an automatic fix or an edit) and validate it again.
+function useText(text, notice, tab) {
+  const name = /\(edited\)/.test(lastReport.file) ? lastReport.file : lastReport.file.replace(/(\.[^.]+)?$/, ' (edited)$1');
+  if ($('paste-main').value.trim()) $('paste-main').value = text;
+  else setLoaded('main', name, text);
+  if (validateText(name, text, { keepTab: true, notice })) { if (tab) { ui.tab = tab; renderValidate(); } }
 }
 $('run-validate').addEventListener('click', runValidate);
 
@@ -187,12 +202,14 @@ function renderValidate() {
       ? ['v-warning', 'alert', 'Review before sending', `No errors. ${plural(counts.warning, 'warning')} should be checked first.`]
       : ['v-ok', 'check', 'Ready to send', 'Every record passes every check.'];
   const pct = result.members ? Math.round(result.records_correct / result.members * 100) : 0;
+  const fixable = result.findings.filter(f => AUTO_FIXABLE.has(f.rule)).length;
 
   const summaryPanel = h('div', { class: 'panel' },
     h('div', { class: `verdict ${v[0]}` },
       h('div', { class: 'verdict-icon' }, icon(v[1])),
       h('div', {}, h('h2', {}, v[2]), h('p', {}, v[3])),
       h('div', { class: 'verdict-actions' },
+        fixable ? h('button', { class: 'btn btn-fix', onclick: applyAutoFix }, icon('check'), `Fix ${plural(fixable, 'problem')} automatically`) : null,
         h('button', { class: 'btn', onclick: (ev) => copyText(ev.currentTarget, reportText(lastReport)) }, icon('copy'), 'Copy report'),
         canDownload() ? h('button', { class: 'btn', onclick: () => download(`${baseName(file)}-findings.csv`, reportCsv(lastReport), 'text/csv') }, icon('download'), 'Download CSV') : null)),
     h('div', { class: 'file-line' },
@@ -204,12 +221,14 @@ function renderValidate() {
       stat('Errors', counts.error, null, counts.error ? 'var(--err)' : null),
       stat('Warnings', counts.warning, null, counts.warning ? 'var(--warn)' : null),
       stat('Info', counts.info)),
+    lastReport.notice ? h('div', { class: 'notice' }, icon('check'), h('div', {}, h('b', {}, lastReport.notice.title), lastReport.notice.lines.map(l => h('span', { class: 'sub' }, l)))) : null,
     fileMap(result),
   );
 
   const tabs = [
     ['records', 'Records', result.records.length],
     ['findings', 'Findings', result.findings.length],
+    ['file', 'File', result.segment_count],
     ['details', 'File details', null],
     ['coverage', 'Coverage', null],
   ];
@@ -221,6 +240,7 @@ function renderValidate() {
 
   if (ui.tab === 'records') content.append(...recordsTab(result));
   if (ui.tab === 'findings') content.append(...findingsTab(result, platform));
+  if (ui.tab === 'file') content.append(...fileTab(result));
   if (ui.tab === 'details') content.append(detailsTab(tx, ic, summary, result));
   if (ui.tab === 'coverage') content.append(coverageTab(tx));
 
@@ -323,7 +343,10 @@ function findingsTab(result, platform) {
       if (open) {
         tbody.append(h('tr', { class: 'detail open' }, h('td', {}), h('td', { colspan: '3' },
           h('div', { class: 'fixbox' },
-            h('div', {}, h('h4', {}, 'How to fix'), h('p', {}, f.fix || 'See the message above.')),
+            h('div', {}, h('h4', {}, 'How to fix'), h('p', {}, f.fix || 'See the message above.'),
+              h('div', { class: 'row-actions' },
+                f.segment ? h('button', { class: 'link', onclick: (ev) => { ev.stopPropagation(); showSegment(f.segment.position); } }, `Show segment ${f.segment.position} in the file`) : null,
+                AUTO_FIXABLE.has(f.rule) ? h('button', { class: 'link', onclick: (ev) => { ev.stopPropagation(); applyAutoFix(); } }, 'Fix automatically') : null)),
             f.where_to_fix ? h('div', { class: 'where' }, h('h4', {}, `Where to fix it in ${system}`), h('p', {}, f.where_to_fix.where), h('p', { class: 'sub' }, f.where_to_fix.how)) : null))));
       }
     }
@@ -351,6 +374,80 @@ function coverageTab(tx) {
     h('h4', {}, 'Coverages by insurance line'),
     barList(Object.fromEntries(lines.map(([k, v]) => [k, Object.values(v).reduce((a, b) => a + b, 0)]))),
     Object.keys(levels).length ? [h('h4', {}, 'Coverages by tier'), barList(levels)] : null);
+}
+
+// ─── Automatic fixes ─────────────────────────────────────────────────────────
+function applyAutoFix() {
+  const { text, fixes } = autoFix834(lastReport.text);
+  if (!fixes.length) return;
+  useText(text, {
+    title: `Fixed ${plural(fixes.length, 'problem')} automatically. Download the corrected file from the File tab.`,
+    lines: fixes.map(f => `Segment ${f.segment.position}: ${f.change}`),
+  });
+}
+
+// ─── File tab: every segment, its loop, its findings and what each element means ──
+const PAGE = 1500;
+function showSegment(position) {
+  ui.tab = 'file'; ui.seg = position; ui.editing = false;
+  ui.limit = Math.max(ui.limit || PAGE, Math.ceil(position / PAGE) * PAGE);
+  renderValidate();
+  document.getElementById(`seg-${position}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function fileTab(result) {
+  const { file, text } = lastReport;
+  const base = baseName(file.replace(/ \(edited\)/, '')) + (/\(edited\)/.test(file) ? '-corrected' : '');
+  const exportJson = () => JSON.stringify(toJson834(text), null, 2);
+  const toolbar = h('div', { class: 'toolbar' },
+    ui.editing
+      ? [h('button', { class: 'btn btn-accent', onclick: () => { const t = document.getElementById('edit-area').value; if (t.trim()) useText(t, { title: 'Validated your changes.', lines: [] }, 'file'); } }, 'Validate changes'),
+         h('button', { class: 'btn', onclick: () => { ui.editing = false; renderValidate(); } }, 'Cancel')]
+      : [h('button', { class: 'btn', onclick: () => { ui.editing = true; renderValidate(); } }, 'Edit file'),
+         canDownload()
+           ? h('button', { class: 'btn', onclick: () => download(`${base}.834`, format834(text), 'text/plain') }, icon('download'), 'Download file')
+           : h('button', { class: 'btn', onclick: (ev) => copyText(ev.currentTarget, format834(text)) }, icon('copy'), 'Copy file'),
+         canDownload()
+           ? h('button', { class: 'btn', onclick: () => download(`${base}.json`, exportJson(), 'application/json') }, icon('download'), 'Export JSON')
+           : h('button', { class: 'btn', onclick: (ev) => copyText(ev.currentTarget, exportJson()) }, icon('copy'), 'Copy as JSON')],
+    h('span', { class: 'toolbar-note' }, 'Shows the file as it is, including personal data. Nothing leaves this device.'));
+
+  if (ui.editing) {
+    return [toolbar, h('div', { class: 'edit-wrap' }, h('textarea', { id: 'edit-area', class: 'edit-area', spellcheck: 'false', 'aria-label': 'Edit the 834 file' }, format834(text)),
+      h('p', { class: 'sub' }, 'Edit the segments, then select Validate changes. Counts and control numbers can be corrected for you afterwards.'))];
+  }
+
+  const { segments } = describe834(text);
+  const bySeg = new Map();
+  for (const f of result.findings) if (f.segment) bySeg.set(f.segment.position, [...(bySeg.get(f.segment.position) || []), f]);
+  const limit = ui.limit || PAGE;
+  const list = h('ol', { class: 'seglist' });
+  let lastLoop = null;
+  for (const s of segments.slice(0, limit)) {
+    const fs = bySeg.get(s.position) || [];
+    const worst = fs.some(f => f.severity === 'error') ? 'error' : fs.some(f => f.severity === 'warning') ? 'warning' : fs.length ? 'info' : null;
+    const open = ui.seg === s.position;
+    const toggle = () => { ui.seg = open ? null : s.position; renderValidate(); };
+    const loopLabel = s.loop !== lastLoop || s.id === 'INS' || s.id === 'HD' ? `${/^\d/.test(s.loop) ? s.loop + ' ' : ''}${s.loop_name}` : '';
+    lastLoop = s.loop;
+    list.append(h('li', { id: `seg-${s.position}`, class: `fv${worst ? ` s-${worst}` : ''}${open ? ' open' : ''}` },
+      h('button', { class: 'seg-line', 'aria-expanded': String(open), onclick: toggle },
+        h('span', { class: 'seg-no' }, s.position),
+        h('span', { class: 'seg-loop' }, loopLabel),
+        h('code', { class: 'seg-text' }, h('b', {}, s.id), s.text.slice(s.id.length))),
+      fs.map(f => h('div', { class: `seg-finding f-${f.severity}` }, h('span', { class: `pill p-${f.severity}` }, SEV[f.severity]), ' ', f.message)),
+      open ? h('div', { class: 'seg-detail' },
+        h('div', { class: 'seg-name' }, `${s.id}: ${s.name}`, h('span', { class: 'sub' }, `Loop ${s.loop}: ${s.loop_name}`)),
+        h('table', { class: 'table el-table' },
+          h('thead', {}, h('tr', {}, h('th', {}, 'Element'), h('th', {}, 'Name'), h('th', {}, 'Value'))),
+          h('tbody', {}, ...s.elements.map(x => h('tr', {},
+            h('td', { style: 'width:1%' }, h('span', { class: 'code' }, x.ref)), h('td', {}, x.name),
+            h('td', {}, x.value === '' ? h('span', { class: 'sub', style: 'margin:0' }, 'Empty') : [h('span', { class: 'code' }, x.value), x.meaning ? h('span', { class: 'sub' }, x.meaning) : null])))))) : null));
+  }
+  const more = segments.length > limit
+    ? h('div', { class: 'empty' }, h('button', { class: 'btn', onclick: () => { ui.limit = limit + PAGE; renderValidate(); } }, `Show the next ${Math.min(PAGE, segments.length - limit).toLocaleString()} segments`), h('span', { class: 'sub' }, `${limit.toLocaleString()} of ${segments.length.toLocaleString()} shown`))
+    : null;
+  return [toolbar, list, more];
 }
 
 // A file can hold several ST/SE transactions (one per member in some state
