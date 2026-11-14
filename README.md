@@ -42,6 +42,8 @@ The full rule list is in [docs/rules.md](docs/rules.md).
 
 Prefer a screen to a chat? The same validator runs as a web page:
 
+![Validation report in the web UI, with a Workday fix location for each finding](docs/images/validation-report.png)
+
 ```bash
 npm run ui          # opens on http://localhost:8834
 ```
