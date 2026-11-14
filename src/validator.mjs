@@ -41,6 +41,8 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
   validateEnvelope(model, add);
   validateSegments(model, add);
 
+  const testFile = e(model.isa, 15) === 'T';
+  const records = [];
   let memberIndex = 0;
   for (const tx of model.transactions) {
     const fileDate = parseD8(e(tx.bgn, 3)) || today;
@@ -59,8 +61,12 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
       } else if (familyCount.has(sub)) {
         familyCount.get(sub).dependents++;
       }
-      validateMember(m, label, { add, p, fileDate, currentSubscriber, seenSubscribers, today, showPii });
+      validateMember(m, label, { add, p, fileDate, currentSubscriber, seenSubscribers, today, showPii, testFile });
+      records.push(memberRecord(m, label));
     }
+    // A member's findings are those whose segment falls between its INS and the next INS (or SE).
+    const txRecords = records.slice(records.length - tx.members.length);
+    txRecords.forEach((r, i) => { r.end = txRecords[i + 1]?.start ?? tx.se?.position ?? Infinity; });
     validateFamilies(familyCount, tx, add);
   }
 
@@ -68,13 +74,45 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
   for (const f of findings) counts[f.severity]++;
   findings.sort((a, b) => sevRank(a.severity) - sevRank(b.severity) || (a.segment?.position ?? 0) - (b.segment?.position ?? 0));
 
+  for (const r of records) {
+    const mine = findings.filter(f => f.segment && f.segment.position >= r.start && f.segment.position < r.end);
+    r.counts = { error: 0, warning: 0, info: 0 };
+    for (const f of mine) r.counts[f.severity]++;
+    r.status = r.counts.error ? 'error' : r.counts.warning ? 'warning' : 'correct';
+    r.rules = [...new Set(mine.map(f => f.rule))];
+    delete r.start; delete r.end;
+  }
+
   return {
     valid: counts.error === 0,
     profile: p.name,
     transactions: model.transactions.length,
     members: memberIndex,
     counts,
+    records_correct: records.filter(r => r.status === 'correct').length,
     findings,
+    records,
+  };
+}
+
+// What the file says about one member, without PII: relationship, change type and coverages.
+function memberRecord(m, label) {
+  const d = (list, q) => { const x = findDtp(list, q); return x ? formatDate(dtpDates(x).start) : ''; };
+  return {
+    member: label,
+    subscriber: e(m.ins, 1) === 'Y',
+    relationship: RELATIONSHIP[e(m.ins, 2)] || e(m.ins, 2),
+    maintenance: MAINTENANCE_TYPE[e(m.ins, 3)] || e(m.ins, 3),
+    benefit_status: BENEFIT_STATUS[e(m.ins, 5)] || e(m.ins, 5),
+    coverages: m.coverages.map(c => ({
+      line: INSURANCE_LINE[e(c.hd, 3)] || e(c.hd, 3),
+      plan: e(c.hd, 4),
+      level: e(c.hd, 5),
+      maintenance: MAINTENANCE_TYPE[e(c.hd, 1)] || e(c.hd, 1),
+      begin: d(c.dtps, '348'),
+      end: d(c.dtps, '349'),
+    })),
+    start: m.ins.position,
   };
 }
 
@@ -165,7 +203,7 @@ function validateHeader(tx, add, p) {
 // ─── Member (INS loop) ───────────────────────────────────────────────────────
 
 function validateMember(m, label, ctx) {
-  const { add, p, fileDate, currentSubscriber, seenSubscribers, today } = ctx;
+  const { add, p, fileDate, currentSubscriber, seenSubscribers, today, testFile } = ctx;
   const ins = m.ins;
   const isSub = e(ins, 1);
   const rel = e(ins, 2);
@@ -202,14 +240,15 @@ function validateMember(m, label, ctx) {
 
   // Name and demographics
   if (!m.nm1) {
-    add('error', 'NM1-MISSING', ins, `${label}: member name (NM1*IL, loop 2100A) is missing.`, 'Add NM1*IL with last and first name.');
+    add('error', 'NM1-MISSING', ins, `${label}: member name (NM1*IL or NM1*74, loop 2100A) is missing.`, 'Add NM1*IL with last and first name (NM1*74 when correcting a name, with the prior name in NM1*70).');
   } else {
     if (!e(m.nm1, 3)) add('error', 'NM1-LAST', m.nm1, `${label}: last name (NM103) is empty.`, 'Send the member\'s legal last name.');
     if (!e(m.nm1, 4)) add('warning', 'NM1-FIRST', m.nm1, `${label}: first name (NM104) is empty.`, 'Send the member\'s legal first name.');
     const q = e(m.nm1, 8), id = e(m.nm1, 9);
     if (q === '34') {
       const ssnProblem = checkSsn(id);
-      if (ssnProblem) add('error', 'SSN-INVALID', m.nm1, `${label}: the SSN in NM109 ${ssnProblem}.`, 'Correct the SSN in the HR system. Never send placeholder SSNs; omit NM108/NM109 if the SSN is unknown and the carrier allows it.');
+      if (ssnProblem && testFile) add('warning', 'SSN-INVALID', m.nm1, `${label}: the SSN in NM109 ${ssnProblem}. This is a test file (ISA15=T), where placeholder SSNs are common.`, 'Fine for testing if the carrier agreed to dummy data. Production files must carry real SSNs.');
+      else if (ssnProblem) add('error', 'SSN-INVALID', m.nm1, `${label}: the SSN in NM109 ${ssnProblem}.`, 'Correct the SSN in the HR system. Never send placeholder SSNs; omit NM108/NM109 if the SSN is unknown and the carrier allows it.');
     } else if (q && !id) {
       add('error', 'NM1-ID', m.nm1, `${label}: NM108 qualifier "${q}" is sent without an ID in NM109.`, 'Send both NM108 and NM109, or neither.');
     }
@@ -241,6 +280,7 @@ function validateMember(m, label, ctx) {
   maxUse(m.dtps, 'member_dtp', label, add);
   maxUse(m.other.filter(s => s.id === 'AMT'), 'member_amt', label, add);
   if (m.coverages.length) maxUse(m.coverages.map(c => c.hd), 'coverages', label, add);
+  for (const d of m.reporting.filter(s => s.id === 'DTP')) checkDtpFormat(d, `${label}, reporting categories (2750)`, add);
 
   if (m.coverages.length === 0 && mType !== '024') {
     add('warning', 'NO-COVERAGE', ins, `${label}: member has no coverage (HD) segments.`, 'Send at least one HD loop with the plan, unless the carrier accepts demographic-only changes.');
@@ -269,6 +309,7 @@ function validateCoverage(c, m, label, { add, p, fileDate }) {
 
   for (const d of c.dtps) checkDtpFormat(d, where, add);
   maxUse(c.dtps, 'coverage_dtp', where, add);
+  for (const d of c.sub.filter(s => s.id === 'DTP')) checkDtpFormat(d, `${where} (provider or COB loop)`, add);
   maxUse(c.other.filter(s => s.id === 'AMT'), 'coverage_amt', where, add);
   maxUse(c.refs, 'coverage_ref', where, add);
   const begin = findDtp(c.dtps, '348');
@@ -338,10 +379,10 @@ function validateSegments(model, add) {
 // ─── Addresses (N3/N4) ───────────────────────────────────────────────────────
 // Values are never echoed: addresses are PII.
 
-const ADDRESS_LOOPS = { IL: 'residence address (2100A)', '31': 'mailing address (2100C)' };
+const ADDRESS_LOOPS = { IL: 'residence address (2100A)', '74': 'residence address (2100A)', '31': 'mailing address (2100C)' };
 
 function validateAddresses(m, label, add) {
-  let context = m.nm1 ? 'IL' : null;
+  let context = m.nm1 ? e(m.nm1, 1) : null;
   let n3 = null;
   const check = (n4) => {
     const where = `${label}, ${ADDRESS_LOOPS[context] || 'address'}`;

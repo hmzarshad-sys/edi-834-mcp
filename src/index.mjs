@@ -72,6 +72,7 @@ server.tool(
     profile_path: z.string().optional().describe('JSON profile file relative to EDI_834_DIR, e.g. "profiles/acme-health.json".'),
     show_pii: z.boolean().optional().describe('Include member names in messages. Default false.'),
     max_findings: z.number().int().positive().optional().describe('Limit findings returned (errors first). Default 200.'),
+    include_records: z.boolean().optional().describe('Also list every member record (relationship, change type, coverages, dates) with its status: correct, warning or error. Default false; records_correct is always returned.'),
     platform: z.enum(PLATFORM_IDS).optional().describe(`Source system: ${PLATFORM_IDS.map(id => `"${id}" (${PLATFORMS[id].label})`).join(', ')}. Any value but "generic" adds where_to_fix to every finding.`),
   },
   async (args) => {
@@ -82,7 +83,9 @@ server.tool(
       const r = validate834(raw, { profile: platformProfile(platform, profile), showPii: !!args.show_pii });
       const limit = args.max_findings || 200;
       const findings = withFixLocations(r.findings.slice(0, limit), platform);
-      return ok({ ...r, platform, findings, findings_truncated: r.findings.length > limit });
+      // Records are only listed on request: on a large file they would flood the conversation.
+      const records = args.include_records ? r.records.slice(0, limit) : undefined;
+      return ok({ ...r, platform, findings, findings_truncated: r.findings.length > limit, records, records_truncated: args.include_records ? r.records.length > limit : undefined });
     } catch (e) { return fail(e); }
   },
 );

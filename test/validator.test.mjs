@@ -287,3 +287,46 @@ test('segments at the limit are accepted', () => {
   const refs = Array.from({ length: 14 }, (_, i) => `REF*X9*R${i}`);
   assert.ok(!rules(run({ members: [sub({ coverages: cov(refs) }), DEPENDENT()] })).includes('SEG-MAX-USE'));
 });
+
+// ─── Provider, COB and reporting-category loops; corrected names; records ────
+
+test('2310, 2320 and 2700/2750 loops are not counted as coverage dates or policy numbers', () => {
+  const reporting = ['LS*2700'];
+  for (let i = 1; i <= 8; i++) reporting.push(`LX*${i}`, `N1*75*CATEGORY ${i}`, `REF*17*${i}`, 'DTP*007*D8*20260101');
+  reporting.push('LE*2700');
+  const r = run({ members: [sub({ coverages: cov([
+    'LX*1', 'NM1*Y2*2******SV*PROV1*72',
+    'COB*P*POLICY1*1', 'DTP*344*D8*20260101', 'DTP*345*D8*20261231',
+    ...reporting,
+  ]) }), DEPENDENT()] });
+  assert.deepEqual(rules(r), []);
+});
+
+test('dates inside reporting categories are still checked', () => {
+  fires('DTP-DATE', { members: [sub({ coverages: cov(['LS*2700', 'LX*1', 'N1*75*X', 'REF*17*1', 'DTP*007*RD8*20260101-20261340', 'LE*2700']) }), DEPENDENT()] });
+});
+
+test('NM1*74 (corrected name) is the member name; NM1*70 and its DMG are the prior name', () => {
+  const raw = build834({ members: [sub(), DEPENDENT()], seCountDelta: 2 }) // two segments are added below
+    .replace('NM1*IL*1*Doe*Jane****34*123451234~\nDMG*D8*19850214*F~', 'NM1*74*1*Doe*Jane****34*123451234~\nDMG*D8*19850214*F~\nNM1*70*1*Roe*Jane~\nDMG*D8*19850214*F~');
+  assert.match(raw, /NM1\*74/);
+  const r = validate834(raw, { today: TODAY });
+  assert.deepEqual(rules(r), []);
+});
+
+test('placeholder SSNs are a warning in test files and an error in production files', () => {
+  const bad = { members: [sub({ ssn: '999999991' }), DEPENDENT()] };
+  assert.equal(run({ ...bad, usage: 'T' }).findings.find(f => f.rule === 'SSN-INVALID').severity, 'warning');
+  assert.equal(run(bad).findings.find(f => f.rule === 'SSN-INVALID').severity, 'error');
+});
+
+test('every member gets a record with its status, coverages and no PII', () => {
+  const r = run({ members: [sub(), DEPENDENT({ dob: '20151331' }), sub({ sub: 'EMP2', name: ['Lee', 'Kim'], ssn: '123451235' })] });
+  assert.equal(r.records.length, 3);
+  assert.deepEqual(r.records.map(x => x.status), ['correct', 'error', 'correct']);
+  assert.equal(r.records_correct, 2);
+  assert.deepEqual(r.records[1].rules, ['DMG-DOB']);
+  assert.deepEqual(r.records[0].coverages[0], { line: 'Health', plan: 'PPO-GOLD', level: 'FAM', maintenance: 'Addition', begin: '2026-01-01', end: '' });
+  const text = JSON.stringify(r.records);
+  for (const pii of ['Doe', 'Jane', 'Lee', '123451234', '19850214']) assert.ok(!text.includes(pii), pii);
+});

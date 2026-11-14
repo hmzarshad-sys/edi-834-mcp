@@ -157,7 +157,7 @@ let query = '';
 function renderValidate({ file, platform, result, summary }) {
   const { counts } = result;
   const verdict = counts.error ? ['b-error', 'Not ready to send'] : counts.warning ? ['b-warning', 'Review warnings before sending'] : ['b-ok', 'Ready to send'];
-  const tx = summary.transactions[0] || {};
+  const tx = combineTransactions(summary.transactions);
   const ic = summary.interchange || {};
 
   const report = h('div', { class: 'card' },
@@ -167,6 +167,7 @@ function renderValidate({ file, platform, result, summary }) {
     ),
     h('div', { class: 'metrics' },
       metric('Members', result.members.toLocaleString()),
+      metric('Correct records', `${result.records_correct} of ${result.members}`, result.records_correct === result.members ? 'var(--ok)' : null),
       metric('Errors', counts.error, 'var(--err)'),
       metric('Warnings', counts.warning, 'var(--warn)'),
       metric('Info', counts.info, 'var(--info)'),
@@ -175,7 +176,7 @@ function renderValidate({ file, platform, result, summary }) {
       kv('File type', tx.action), kv('File date', fmtD8(tx.file_date)), kv('Sponsor', tx.sponsor), kv('Payer', tx.payer),
       kv('Sender → receiver', ic.sender ? `${ic.sender.trim()} → ${ic.receiver.trim()}` : null),
       kv('Usage', ic.usage), kv('Subscribers / dependents', tx.subscribers !== undefined ? `${tx.subscribers} / ${tx.dependents}` : null),
-      kv('Terminations', tx.terminations),
+      kv('Terminations', tx.terminations), kv('Transactions (ST/SE)', tx.transactions),
     ),
     h('div', { class: 'row', style: 'margin-top:12px' },
       h('button', { class: 'btn', onclick: (ev) => copyText(ev.currentTarget, reportText(lastReport)) }, 'Copy report'),
@@ -207,7 +208,17 @@ function renderValidate({ file, platform, result, summary }) {
   );
   drawFindings(list, result.findings, platform);
 
-  $('validate-results').replaceChildren(report, findingsCard, coverage || '');
+  const searchBox = findingsCard.querySelector('input');
+  const recordsCard = result.records.length ? recordsView(result.records, (label) => {
+    filter = 'all';
+    findingsCard.querySelectorAll('.chip').forEach((c, i) => c.setAttribute('aria-pressed', String(i === 0)));
+    query = label.toLowerCase();
+    if (searchBox) searchBox.value = label;
+    drawFindings(list, result.findings, platform);
+    findingsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }) : null;
+
+  $('validate-results').replaceChildren(report, recordsCard || '', findingsCard, coverage || '');
   report.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -231,6 +242,67 @@ function drawFindings(list, findings, platform) {
       h('div', { class: 'f-fix', style: 'margin-top:2px' }, f.where_to_fix.how),
     ) : null,
   )));
+}
+
+// A file can hold several ST/SE transactions (one per member in some state
+// Medicaid files): show the header of the first and add up the counts.
+function combineTransactions(txs) {
+  if (txs.length <= 1) return txs[0] || {};
+  const out = { ...txs[0], subscribers: 0, dependents: 0, terminations: 0, coverage_lines: {}, coverage_levels: {} };
+  for (const t of txs) {
+    out.subscribers += t.subscribers || 0; out.dependents += t.dependents || 0; out.terminations += t.terminations || 0;
+    for (const [line, byType] of Object.entries(t.coverage_lines || {})) {
+      out.coverage_lines[line] ??= {};
+      for (const [k, v] of Object.entries(byType)) out.coverage_lines[line][k] = (out.coverage_lines[line][k] || 0) + v;
+    }
+    for (const [k, v] of Object.entries(t.coverage_levels || {})) out.coverage_levels[k] = (out.coverage_levels[k] || 0) + v;
+  }
+  out.transactions = txs.length;
+  return out;
+}
+
+// ─── Member records ──────────────────────────────────────────────────────────
+const REC_BADGE = { correct: ['b-ok', 'Correct'], warning: ['b-warning', 'Warnings'], error: ['b-error', 'Errors'] };
+let recFilter = 'all';
+
+function recordsView(records, onShow) {
+  const list = h('div');
+  const counts = { correct: 0, issues: 0 };
+  records.forEach(r => counts[r.status === 'correct' ? 'correct' : 'issues']++);
+  const draw = () => {
+    const shown = records.filter(r => recFilter === 'all' || (recFilter === 'correct') === (r.status === 'correct'));
+    if (!shown.length) { list.replaceChildren(h('div', { class: 'empty' }, recFilter === 'correct' ? 'No record passes every check yet.' : 'Every record passes every check.')); return; }
+    list.replaceChildren(...shown.map(r => {
+      const [cls, word] = REC_BADGE[r.status];
+      const issues = [r.counts.error && `${r.counts.error} error${r.counts.error > 1 ? 's' : ''}`, r.counts.warning && `${r.counts.warning} warning${r.counts.warning > 1 ? 's' : ''}`].filter(Boolean).join(', ');
+      // Strip the "(subscriber …, Self)" part for the search box, keep "Member #N (".
+      const key = r.member.slice(0, r.member.indexOf('(') + 1);
+      return h('div', { class: 'finding' },
+        h('div', { class: 'f-head' },
+          h('span', { class: `badge ${cls}` }, r.status === 'correct' ? '✓ Correct' : word),
+          h('span', { style: 'font-weight:600' }, r.member)),
+        h('div', { class: 'f-fix', style: 'margin-top:4px' }, [r.subscriber ? 'Subscriber' : 'Dependent', r.maintenance, r.benefit_status].filter(Boolean).join(' · ')),
+        ...r.coverages.map(c => h('div', { class: 'f-fix' },
+          [c.line, c.plan, c.level, c.maintenance].filter(Boolean).join(' · '),
+          c.begin ? ` · from ${c.begin}` : '', c.end ? ` to ${c.end}` : '')),
+        r.status === 'correct'
+          ? h('div', { class: 'f-fix', style: 'color:var(--ok);margin-top:4px' }, 'Passes every check for this record.')
+          : h('div', { class: 'row', style: 'margin-top:6px;gap:8px' },
+              h('span', { class: 'f-fix' }, `${issues}: ${r.rules.join(', ')}`),
+              h('button', { class: 'link', onclick: () => onShow(key) }, 'Show findings')),
+      );
+    }));
+  };
+  const chip = (id, text) => h('button', { class: 'chip', 'aria-pressed': String(recFilter === id), onclick: (ev) => {
+    recFilter = id;
+    ev.currentTarget.parentNode.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', String(c === ev.currentTarget)));
+    draw();
+  } }, text);
+  draw();
+  return h('div', { class: 'card' },
+    h('h2', {}, `Member records (${records.length})`),
+    h('div', { class: 'chips' }, chip('all', 'All'), chip('correct', `Correct (${counts.correct})`), chip('issues', `With issues (${counts.issues})`)),
+    list);
 }
 
 // ─── Compare ─────────────────────────────────────────────────────────────────
@@ -326,6 +398,10 @@ function reportText({ file, result }) {
     if (f.where_to_fix) lines.push(`  Where to fix: ${f.where_to_fix.where}`);
   }
   if (!result.findings.length) lines.push('No problems found.');
+  lines.push('', `Member records: ${result.records_correct} of ${result.members} correct`);
+  for (const r of result.records) {
+    lines.push(`  ${r.status === 'correct' ? 'OK   ' : r.status === 'error' ? 'ERROR' : 'WARN '} ${r.member}${r.rules.length ? ` – ${r.rules.join(', ')}` : ''}`);
+  }
   return lines.join('\n');
 }
 function reportCsv({ result }) {

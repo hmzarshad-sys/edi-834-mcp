@@ -71,7 +71,7 @@ Rules marked *(profile)* only run when a carrier profile turns them on.
 | NM1-LAST | error | Empty last name |
 | NM1-FIRST | warning | Empty first name |
 | NM1-ID | error | ID qualifier sent without an ID |
-| SSN-INVALID | error | SSN that is never issued (area 000/666/9xx, group 00, serial 0000) or a placeholder |
+| SSN-INVALID | error (warning in test files, ISA15 = T) | SSN that is never issued (area 000/666/9xx, group 00, serial 0000) or a placeholder |
 | SSN-REQUIRED | error *(profile)* | Subscriber sent without SSN |
 | DMG-MISSING | warning | No demographics |
 | DMG-DOB | error | Birth date not a valid D8 date |

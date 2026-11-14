@@ -69,6 +69,7 @@ export function parse834(raw) {
   let member = null;
   let coverage = null;
   let inMemberName = false;
+  let inReporting = false; // loop 2700/2750 (LS ... LE)
 
   const closeMember = () => { if (member) { tx.members.push(member); member = null; coverage = null; } };
 
@@ -100,8 +101,9 @@ export function parse834(raw) {
         if (!tx) break;
         if (seg.id === 'INS') {
           closeMember();
-          member = { ins: seg, refs: [], dtps: [], nm1: null, dmg: null, other: [], coverages: [], position: seg.position };
+          member = { ins: seg, refs: [], dtps: [], nm1: null, dmg: null, other: [], coverages: [], reporting: [], position: seg.position };
           inMemberName = false;
+          inReporting = false;
           break;
         }
         if (!member) {
@@ -111,20 +113,30 @@ export function parse834(raw) {
           tx.header.push(seg);
           break;
         }
+        // Loop 2700 member reporting categories (LS ... LE, with 2750 N1/REF/DTP inside)
+        // come after the coverage loops. Keep them apart so their DTP and REF
+        // segments are not counted as coverage dates or policy numbers.
+        if (seg.id === 'LS') { inReporting = true; coverage = null; member.reporting.push(seg); break; }
+        if (inReporting) { member.reporting.push(seg); if (seg.id === 'LE') inReporting = false; break; }
         if (seg.id === 'HD') {
-          coverage = { hd: seg, dtps: [], refs: [], other: [], position: seg.position };
+          coverage = { hd: seg, dtps: [], refs: [], other: [], sub: [], inSub: false, position: seg.position };
           member.coverages.push(coverage);
           break;
         }
         if (coverage) {
+          // 2310 provider (LX, NM1, N3, N4, PER, PRV, DTP) and 2320 coordination of
+          // benefits (COB, REF, DTP, N1...) loops follow the coverage's own segments.
+          if (seg.id === 'LX' || seg.id === 'COB') coverage.inSub = true;
+          if (coverage.inSub) { coverage.sub.push(seg); break; }
           if (seg.id === 'DTP') coverage.dtps.push(seg);
           else if (seg.id === 'REF') coverage.refs.push(seg);
           else coverage.other.push(seg);
           break;
         }
         if (seg.id === 'NM1') {
-          // The first NM1 in the member loop is the member name (2100A, NM101=IL).
-          if (!member.nm1 && e(seg, 1) === 'IL') { member.nm1 = seg; inMemberName = true; }
+          // The first NM1 in the member loop is the member name (2100A): NM101=IL,
+          // or 74 (corrected insured) when 2100B NM1*70 carries the prior name.
+          if (!member.nm1 && (e(seg, 1) === 'IL' || e(seg, 1) === '74')) { member.nm1 = seg; inMemberName = true; }
           else { member.other.push(seg); inMemberName = false; }
         } else if (seg.id === 'DMG' && inMemberName && !member.dmg) member.dmg = seg;
         else if (seg.id === 'REF' && !member.nm1) member.refs.push(seg);
