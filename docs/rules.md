@@ -44,6 +44,7 @@ Rules marked *(profile)* only run when a carrier profile turns them on.
 | HDR-BGN-DATE | error | BGN03 is not a valid date |
 | HDR-BGN08 | error | Invalid action code (must be 2, 4 or RX) |
 | HDR-FULL-REPLACE | info | RX file: anyone left out may be terminated |
+| HDR-FILE-TYPE | warning | *(profile)* BGN08 says full or change file, but the profile expects the other |
 | HDR-SPONSOR | error | No sponsor (N1*P5) |
 | HDR-PAYER | error | No payer (N1*IN) |
 | HDR-NO-MEMBERS | warning | Transaction has no members |

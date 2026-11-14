@@ -27,6 +27,7 @@ export const DEFAULT_PROFILE = {
   max_retro_days: 90,                 // flag coverage starting more than N days before the file date
   max_future_days: 180,               // flag coverage starting more than N days after the file date
   dependent_age_limit: 26,            // flag child dependents at or over this age (0 disables)
+  expected_file_type: null,           // "full" or "change": flag a file whose BGN08 says otherwise
 };
 
 export function validate834(raw, { profile = {}, showPii = false, today = new Date() } = {}) {
@@ -43,7 +44,7 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
   let memberIndex = 0;
   for (const tx of model.transactions) {
     const fileDate = parseD8(e(tx.bgn, 3)) || today;
-    validateHeader(tx, add);
+    validateHeader(tx, add, p);
     const seenSubscribers = new Map();
     let currentSubscriber = null;
     const familyCount = new Map();
@@ -132,7 +133,7 @@ function validateEnvelope(model, add) {
 
 // ─── Transaction header (BGN, sponsor, payer) ────────────────────────────────
 
-function validateHeader(tx, add) {
+function validateHeader(tx, add, p) {
   if (!tx.bgn) {
     add('error', 'HDR-BGN-MISSING', tx.st, 'BGN (beginning segment) is missing after ST.', 'Every 834 needs BGN with purpose code, reference, date and action code.');
   } else {
@@ -143,6 +144,14 @@ function validateHeader(tx, add) {
       add('error', 'HDR-BGN08', tx.bgn, `BGN08 "${action}" is not a valid action code.`, 'Use 2 (changes only), 4 (verify/audit) or RX (full replacement), as agreed with the carrier.');
     } else if (action === 'RX') {
       add('info', 'HDR-FULL-REPLACE', tx.bgn, 'BGN08 is RX: the carrier will treat this file as a full replacement and may terminate anyone not in it.', 'Make sure every covered member is included before sending a replacement file.');
+    }
+    const isFull = action === 'RX' || action === '4';
+    if (BGN_ACTION[action] && p.expected_file_type && (p.expected_file_type === 'full') !== isFull) {
+      add('warning', 'HDR-FILE-TYPE', tx.bgn,
+        `BGN08 "${action}" marks this as a ${isFull ? 'full' : 'change'} file, but the profile expects a ${p.expected_file_type} file.`,
+        p.expected_file_type === 'full'
+          ? 'Send a full file (BGN08 RX or 4, as the carrier specifies), or update the profile if the carrier now accepts change files.'
+          : 'Send a change file (BGN08 2), or update the profile if the carrier now wants full files. A full file sent by mistake can terminate members left out of it.');
     }
   }
   if (!tx.sponsor) add('error', 'HDR-SPONSOR', tx.bgn || tx.st, 'Sponsor (N1*P5, loop 1000A) is missing.', 'Add N1*P5 with the employer name and ID.');

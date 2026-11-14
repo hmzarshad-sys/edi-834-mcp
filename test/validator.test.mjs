@@ -161,6 +161,14 @@ test('profile restricts insurance lines and coverage levels', () => {
   assert.ok(rules(r).includes('HD03-PROFILE'));
   assert.ok(rules(r).includes('HD05-PROFILE'));
 });
+test('profile can require a full or a change file', () => {
+  fires('HDR-FILE-TYPE', { action: '2' }, { profile: { expected_file_type: 'full' } });
+  fires('HDR-FILE-TYPE', { action: 'RX' }, { profile: { expected_file_type: 'change' } });
+  assert.ok(!rules(run({ action: 'RX' }, { profile: { expected_file_type: 'full' } })).includes('HDR-FILE-TYPE'));
+  assert.ok(!rules(run({ action: '2' }, { profile: { expected_file_type: 'change' } })).includes('HDR-FILE-TYPE'));
+  assert.ok(!rules(run({ action: '2' })).includes('HDR-FILE-TYPE'));
+});
+
 test('profile can require a group number', () => {
   fires('REF-1L', {}, { profile: { require_group_number: true } });
   const ok = run({ members: [SUBSCRIBER({ extraRefs: ['REF*1L*GRP100'] }), DEPENDENT({ extraRefs: ['REF*1L*GRP100'] })] }, { profile: { require_group_number: true } });

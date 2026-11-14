@@ -11,6 +11,9 @@ EDI 834 MCP: a local MCP server that validates, compares, summarizes and explain
 - `src/mask.mjs`: member labels without PII
 - `src/files.mjs`: reads only inside `EDI_834_DIR`
 - `src/workday.mjs`: Workday CCB 834 V2 setup guide, service chooser, and a fix location for every rule
+- `src/employee-navigator.mjs`: Employee Navigator fix location for every rule, and its validation defaults
+- `src/platforms.mjs`: registry of source systems (hints + profile defaults) used by the MCP tool and the UI
+- `ui/`: browser UI (reuses `src/` pure modules); `scripts/build-ui.mjs` bundles it into one HTML file
 - `src/index.mjs`: MCP tool wiring only, no logic
 - `docs/rules.md`: rule catalog. Keep it in sync with the validator.
 
@@ -23,6 +26,6 @@ EDI 834 MCP: a local MCP server that validates, compares, summarizes and explain
 - No network calls. No new dependencies without a strong reason.
 - Test data comes only from `test/fixtures/build834.mjs` (fictional people). Never commit real files.
 
-Every validator rule also needs an entry in `WORKDAY_HINTS` (a test enforces it). After changing `src/workday.mjs`, run `npm run docs` to regenerate `docs/workday-ccb-834-v2.md`.
+Every validator rule also needs an entry in the hints of every platform in `src/platforms.mjs` (`WORKDAY_HINTS`, `EN_HINTS`; a test enforces it). After changing a platform file, run `npm run docs` to regenerate `docs/workday-ccb-834-v2.md` and `docs/employee-navigator.md`.
 
 Run `npm test` before every commit.

@@ -7,7 +7,7 @@
 
 import { validate834 } from '../src/validator.mjs';
 import { summarize834, compare834 } from '../src/summary.mjs';
-import { workdayHint } from '../src/workday.mjs';
+import { PLATFORMS, platformProfile, withFixLocations } from '../src/platforms.mjs';
 import { explainCode } from '../src/explain.mjs';
 import { CODE_TABLES } from '../src/codes.mjs';
 import { SAMPLES } from './samples.mjs';
@@ -40,6 +40,9 @@ function showView(name) {
   }
 }
 for (const v of VIEWS) $(`tab-${v}`).addEventListener('click', () => showView(v));
+
+// ─── Source system menu ──────────────────────────────────────────────────────
+for (const [id, p] of Object.entries(PLATFORMS)) $('platform').append(h('option', { value: id }, p.label));
 
 // ─── File pickers ────────────────────────────────────────────────────────────
 const files = { main: null, old: null, new: null };
@@ -135,11 +138,9 @@ function runValidate() {
   const platform = $('platform').value;
   const showPii = $('show-pii').checked;
   try {
-    const result = validate834(source.text, { profile, showPii });
+    const result = validate834(source.text, { profile: platformProfile(platform, profile), showPii });
     const summary = summarize834(source.text);
-    if (platform === 'workday_ccb_834_v2') {
-      result.findings = result.findings.map(f => ({ ...f, where_to_fix: workdayHint(f.rule) }));
-    }
+    result.findings = withFixLocations(result.findings, platform);
     lastReport = { file: source.name, platform, result, summary };
     renderValidate(lastReport);
   } catch (err) {
@@ -161,7 +162,7 @@ function renderValidate({ file, platform, result, summary }) {
 
   const report = h('div', { class: 'card' },
     h('div', { class: 'verdict' },
-      h('div', {}, h('h2', { style: 'margin:0' }, 'Validation report'), h('div', { class: 'muted' }, file, ' · ', result.profile, ' · ', platform === 'workday_ccb_834_v2' ? 'Source: Workday CCB 834 V2' : 'Source: any system')),
+      h('div', {}, h('h2', { style: 'margin:0' }, 'Validation report'), h('div', { class: 'muted' }, file, ' · ', result.profile, ' · Source: ', PLATFORMS[platform].label.replace(/^Any/, 'any'))),
       h('span', { class: `badge ${verdict[0]}` }, verdict[1]),
     ),
     h('div', { class: 'metrics' },
@@ -225,8 +226,8 @@ function drawFindings(list, findings, platform) {
     ),
     h('div', { class: 'f-msg' }, f.message),
     f.fix ? h('div', { class: 'f-fix' }, h('b', {}, 'Fix: '), f.fix) : null,
-    platform === 'workday_ccb_834_v2' && f.where_to_fix ? h('div', { class: 'f-wd' },
-      h('div', {}, h('b', {}, 'Where in Workday: '), f.where_to_fix.where),
+    f.where_to_fix ? h('div', { class: 'f-wd' },
+      h('div', {}, h('b', {}, `Where in ${PLATFORMS[platform].system}: `), f.where_to_fix.where),
       h('div', { class: 'f-fix', style: 'margin-top:2px' }, f.where_to_fix.how),
     ) : null,
   )));
@@ -322,14 +323,14 @@ function reportText({ file, result }) {
     lines.push(`[${f.severity.toUpperCase()}] ${f.rule}${f.segment ? ` (segment ${f.segment.position} ${f.segment.id})` : ''}`);
     lines.push(`  ${f.message}`);
     if (f.fix) lines.push(`  Fix: ${f.fix}`);
-    if (f.where_to_fix) lines.push(`  Workday: ${f.where_to_fix.where}`);
+    if (f.where_to_fix) lines.push(`  Where to fix: ${f.where_to_fix.where}`);
   }
   if (!result.findings.length) lines.push('No problems found.');
   return lines.join('\n');
 }
 function reportCsv({ result }) {
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [['severity', 'rule', 'segment_position', 'segment_id', 'message', 'fix', 'workday_where', 'workday_how']];
+  const rows = [['severity', 'rule', 'segment_position', 'segment_id', 'message', 'fix', 'where_to_fix', 'how_to_fix']];
   for (const f of result.findings) rows.push([f.severity, f.rule, f.segment?.position, f.segment?.id, f.message, f.fix, f.where_to_fix?.where, f.where_to_fix?.how]);
   return rows.map(r => r.map(q).join(',')).join('\r\n');
 }

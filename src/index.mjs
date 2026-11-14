@@ -13,7 +13,8 @@ import { summarize834, compare834 } from './summary.mjs';
 import { explainCode } from './explain.mjs';
 import { CODE_TABLES } from './codes.mjs';
 import { readEdiFile, readJson, baseDir } from './files.mjs';
-import { setupGuide, chooseService, workdayHint, SECTION_ORDER, WORKDAY_TEMPLATE } from './workday.mjs';
+import { setupGuide, chooseService, SECTION_ORDER, WORKDAY_TEMPLATE } from './workday.mjs';
+import { PLATFORMS, PLATFORM_IDS, platformProfile, withFixLocations } from './platforms.mjs';
 
 const VERSION = '0.2.0';
 const server = new McpServer({ name: 'edi-834-mcp', version: VERSION });
@@ -27,6 +28,7 @@ const profileSchema = z.object({
   max_retro_days: z.number().optional(),
   max_future_days: z.number().optional(),
   dependent_age_limit: z.number().optional(),
+  expected_file_type: z.enum(['full', 'change']).nullable().optional(),
 }).partial();
 
 const source = {
@@ -60,8 +62,9 @@ server.tool(
     'Each finding has a rule ID, severity, segment position, plain-English message and fix.',
     'Names, SSNs and birth dates are never included unless show_pii=true.',
     'Pass a carrier profile (inline or profile_path) to apply companion-guide rules.',
-    'Set platform="workday_ccb_834_v2" for files from Workday Cloud Connect for Benefits 834 V2:',
-    'each finding then says where in Workday to fix it (map, attribute, service, security or data).',
+    'Set platform to the source system to get where_to_fix on every finding:',
+    '"workday_ccb_834_v2" (Workday Cloud Connect for Benefits 834 V2: map, attribute, service, security or data)',
+    'or "employee_navigator" (Employee Navigator 834 EDI file: Setup, Plans, Fields, or the person\'s record).',
   ].join('\n'),
   {
     ...source,
@@ -69,19 +72,17 @@ server.tool(
     profile_path: z.string().optional().describe('JSON profile file relative to EDI_834_DIR, e.g. "profiles/acme-health.json".'),
     show_pii: z.boolean().optional().describe('Include member names in messages. Default false.'),
     max_findings: z.number().int().positive().optional().describe('Limit findings returned (errors first). Default 200.'),
-    platform: z.enum(['generic', 'workday_ccb_834_v2']).optional().describe('Source system. "workday_ccb_834_v2" adds where_to_fix (Workday task or setting) to every finding.'),
+    platform: z.enum(PLATFORM_IDS).optional().describe(`Source system: ${PLATFORM_IDS.map(id => `"${id}" (${PLATFORMS[id].label})`).join(', ')}. Any value but "generic" adds where_to_fix to every finding.`),
   },
   async (args) => {
     try {
       const raw = await loadSource(args);
       const profile = args.profile_path ? await readJson(args.profile_path) : (args.profile || {});
-      const r = validate834(raw, { profile, showPii: !!args.show_pii });
+      const platform = args.platform || 'generic';
+      const r = validate834(raw, { profile: platformProfile(platform, profile), showPii: !!args.show_pii });
       const limit = args.max_findings || 200;
-      let findings = r.findings.slice(0, limit);
-      if (args.platform === 'workday_ccb_834_v2') {
-        findings = findings.map(f => ({ ...f, where_to_fix: workdayHint(f.rule) }));
-      }
-      return ok({ ...r, platform: args.platform || 'generic', findings, findings_truncated: r.findings.length > limit });
+      const findings = withFixLocations(r.findings.slice(0, limit), platform);
+      return ok({ ...r, platform, findings, findings_truncated: r.findings.length > limit });
     } catch (e) { return fail(e); }
   },
 );

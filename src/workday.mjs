@@ -217,6 +217,7 @@ export const WORKDAY_HINTS = {
   'ENV-TEST-FILE': { where: 'Configure Integration Attributes > Header elements (usage indicator, if exposed in your release)', how: 'Switch the usage indicator to Production before go-live, as agreed with the carrier.' },
   'HDR-BGN-MISSING': ENVELOPE, 'HDR-BGN01': ENVELOPE, 'HDR-BGN-DATE': ENVELOPE,
   'HDR-BGN08': { where: 'Configure Integration Services (transmission service)', how: 'The action code follows the transmission service. Confirm the carrier expects a change file or a full file and pick the matching service (choose_workday_834_service).' },
+  'HDR-FILE-TYPE': { where: 'Configure Integration Services (transmission service)', how: 'The file type follows the enabled transmission service. Enable the service that matches what the carrier expects (choose_workday_834_service), or update the profile if the carrier changed its requirement.' },
   'HDR-FULL-REPLACE': { where: 'Configure Integration Services (transmission service)', how: 'A full-file service is enabled. Run compare_834 against the previous file before every send, and check Population Eligibility so nobody drops out by mistake.' },
   'HDR-SPONSOR': SPONSOR_PAYER, 'HDR-PAYER': SPONSOR_PAYER,
   'HDR-NO-MEMBERS': { where: 'Configure Integration Attributes > Benefit Plans; Configure Integration Population Eligibility; Debug Service parameters', how: 'Check that the carrier\'s plans are selected, that the eligibility calculated field returns true for the intended workers, and (for Changes Only) that there were changes since the last run.' },

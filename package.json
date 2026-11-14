@@ -10,7 +10,7 @@
     "ui": "node ui/server.mjs",
     "build:ui": "node scripts/build-ui.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
-    "docs": "node scripts/gen-workday-doc.mjs"
+    "docs": "node scripts/gen-workday-doc.mjs && node scripts/gen-employee-navigator-doc.mjs"
   },
   "keywords": ["mcp", "edi", "x12", "834", "benefits", "enrollment", "hipaa", "hr", "payroll", "workday"],
   "author": "Humza Arshad",
