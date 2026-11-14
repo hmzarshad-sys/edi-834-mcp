@@ -326,6 +326,8 @@ test('every member gets a record with its status, coverages and no PII', () => {
   assert.deepEqual(r.records.map(x => x.status), ['correct', 'error', 'correct']);
   assert.equal(r.records_correct, 2);
   assert.deepEqual(r.records[1].rules, ['DMG-DOB']);
+  assert.ok(r.records[1].position > r.records[0].position);
+  assert.ok(r.segment_count > r.records[2].position);
   assert.deepEqual(r.records[0].coverages[0], { line: 'Health', plan: 'PPO-GOLD', level: 'FAM', maintenance: 'Addition', begin: '2026-01-01', end: '' });
   const text = JSON.stringify(r.records);
   for (const pii of ['Doe', 'Jane', 'Lee', '123451234', '19850214']) assert.ok(!text.includes(pii), pii);
