@@ -50,7 +50,7 @@ Prefer a screen to a chat? The same validator runs as a web page. Use it online 
 npm run ui          # opens on http://localhost:8834
 ```
 
-Drop in an 834 file to validate it, compare two files, or look up a code. Every member record is listed with what the file says about it (relationship, change type, coverages and dates) and whether it is correct or has issues. It works with 834 files from any system. Pick **Workday CCB 834 V2** or **Employee Navigator** as the source system to also see where in that system to fix each finding. The page validates files in your browser: the local server only serves the page and never receives your files.
+Drop in an 834 file to validate it, compare two files, or look up a code. Every member record is listed with what the file says about it (relationship, change type, coverages and dates) and whether it is correct or has issues. The File tab shows every segment with its loop, highlights the ones with problems and explains each element; you can edit the file, validate your changes, fix count and control-number errors automatically, and download the corrected file or a JSON export. It works with 834 files from any system. Pick **Workday CCB 834 V2** or **Employee Navigator** as the source system to also see where in that system to fix each finding. The page validates files in your browser: the local server only serves the page and never receives your files.
 
 To get one self-contained HTML file you can open offline or share with your team:
 
