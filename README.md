@@ -44,7 +44,7 @@ The full rule list is in [docs/rules.md](docs/rules.md).
 
 Prefer a screen to a chat? The same validator runs as a web page. Use it online at **https://hmzarshad-sys.github.io/edi-834-mcp/**, or run it yourself:
 
-![Validation report in the web UI: each finding with its rule, segment and fix](docs/images/validation-report.png)
+![The web UI: verdict, correct-record count, file map and member records](docs/images/validation-report.png)
 
 ```bash
 npm run ui          # opens on http://localhost:8834

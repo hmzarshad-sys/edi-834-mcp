@@ -80,6 +80,7 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
     for (const f of mine) r.counts[f.severity]++;
     r.status = r.counts.error ? 'error' : r.counts.warning ? 'warning' : 'correct';
     r.rules = [...new Set(mine.map(f => f.rule))];
+    r.position = r.start; // segment number of the member's INS
     delete r.start; delete r.end;
   }
 
@@ -88,6 +89,7 @@ export function validate834(raw, { profile = {}, showPii = false, today = new Da
     profile: p.name,
     transactions: model.transactions.length,
     members: memberIndex,
+    segment_count: model.segments.length,
     counts,
     records_correct: records.filter(r => r.status === 'correct').length,
     findings,
